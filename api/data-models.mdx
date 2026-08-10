@@ -1,0 +1,240 @@
+---
+title: "Data Models: ORM Schema and Enum Reference"
+sidebarTitle: "Data Models"
+description: "Full reference for every SQLAlchemy ORM model, PostgreSQL enum type, column definition, and cross-table relationship in Tradiciones y Sabores."
+---
+
+All persistence in Tradiciones y Sabores is handled by **SQLAlchemy ORM** models defined in `models.py`. On startup, `Base.metadata.create_all(bind=engine, checkfirst=True)` inspects the connected PostgreSQL database and creates any missing tables or enum types automatically — no manual migration step is needed for a fresh deployment. The models are split across two PostgreSQL schemas: the default `public` schema for the core restaurant tables and a dedicated `Inventario` schema for supply-chain tables.
+
+<Note>
+  The `Inventario` schema is created at startup via `CREATE SCHEMA IF NOT EXISTS "Inventario"` only when the active database dialect is PostgreSQL. When running SQLite (e.g., local dev without a Postgres instance), the schema qualifier is ignored.
+</Note>
+
+---
+
+## Enumerations
+
+The following Python `enum.Enum` classes are mapped to native PostgreSQL `ENUM` types. Each value shown is the exact string stored in the database column.
+
+### `EstadoMesaEnum` — Table status
+
+<ResponseField name="disponible" type="string">
+  The table is free and can accept new guests.
+</ResponseField>
+<ResponseField name="ocupada" type="string">
+  The table is currently occupied.
+</ResponseField>
+<ResponseField name="reservada" type="string">
+  The table has been reserved for an upcoming booking.
+</ResponseField>
+<ResponseField name="fuera_de_servicio" type="string">
+  The table is temporarily out of service (maintenance, cleaning, etc.).
+</ResponseField>
+
+### `TipoPedidoEnum` — Order type
+
+<ResponseField name="mesa" type="string">
+  Dine-in order associated with a specific table.
+</ResponseField>
+<ResponseField name="pickup" type="string">
+  Take-away order; no table assignment required.
+</ResponseField>
+<ResponseField name="delivery" type="string">
+  Home delivery order; requires a `direccion_envio` value.
+</ResponseField>
+
+### `EstadoOrdenEnum` — Order lifecycle state
+
+<ResponseField name="recibido" type="string">
+  Order has been placed and is queued in the kitchen. This is the default value on creation.
+</ResponseField>
+<ResponseField name="preparando" type="string">
+  Kitchen staff have started preparing the order.
+</ResponseField>
+<ResponseField name="listo" type="string">
+  Order preparation is complete and is ready for pickup or delivery.
+</ResponseField>
+<ResponseField name="entregado" type="string">
+  Order has been handed to the customer.
+</ResponseField>
+
+### `CategoriaPlatoEnum` — Dish category
+
+<ResponseField name="entrada" type="string">
+  Starter or appetizer.
+</ResponseField>
+<ResponseField name="plato_principal" type="string">
+  Main course.
+</ResponseField>
+<ResponseField name="postre" type="string">
+  Dessert.
+</ResponseField>
+<ResponseField name="bebida" type="string">
+  Beverage (alcoholic or non-alcoholic).
+</ResponseField>
+<ResponseField name="acompañante" type="string">
+  Side dish or accompaniment. Stored in the database as `acompañante` (with tilde).
+</ResponseField>
+
+### `EstadoPagoEnum` — Payment status
+
+<ResponseField name="pendiente" type="string">
+  Invoice has been generated but payment has not yet been collected. Default on invoice creation.
+</ResponseField>
+<ResponseField name="pagado" type="string">
+  Payment has been received and confirmed.
+</ResponseField>
+<ResponseField name="anulado" type="string">
+  The invoice or transaction has been voided.
+</ResponseField>
+
+---
+
+## Core Tables (schema: `public`)
+
+These six tables form the transactional heart of the restaurant POS system.
+
+### `mesa`
+
+Represents a physical dining table in the restaurant.
+
+| Column | Type | Constraints | Description |
+|---|---|---|---|
+| `id_mesa` | `INTEGER` | PK, autoincrement | Surrogate primary key |
+| `capacidad` | `INTEGER` | NOT NULL | Maximum number of guests the table seats |
+| `estado` | `EstadoMesaEnum` | NOT NULL, default `disponible` | Current occupancy state |
+| `ubicacion` | `VARCHAR(100)` | nullable | Human-readable location label (e.g. `"Terraza - M1"`) |
+
+### `plato`
+
+Represents a single item on the restaurant's menu.
+
+| Column | Type | Constraints | Description |
+|---|---|---|---|
+| `id_plato` | `INTEGER` | PK, autoincrement | Surrogate primary key |
+| `nombre` | `VARCHAR(100)` | NOT NULL | Display name of the dish |
+| `descripcion` | `VARCHAR(255)` | nullable | Short description shown to customers |
+| `precio` | `NUMERIC(8,2)` | NOT NULL | Unit price in the restaurant's base currency |
+| `categoria` | `CategoriaPlatoEnum` | NOT NULL | Menu category |
+
+### `cliente`
+
+Stores customer identity information. The primary key is a Venezuelan-style ID (`cedula`).
+
+| Column | Type | Constraints | Description |
+|---|---|---|---|
+| `cedula_cliente` | `VARCHAR(20)` | PK | National ID or custom identifier (e.g. `"V-12345678"`) |
+| `nombre` | `VARCHAR(100)` | NOT NULL | Full name of the customer |
+| `telefono` | `VARCHAR(20)` | NOT NULL | Contact phone number |
+| `email` | `VARCHAR(100)` | nullable | Email address |
+| `direccion_habitual` | `VARCHAR(255)` | nullable | Stored home or default delivery address |
+
+<Tip>
+  A seed record with `cedula_cliente = "V-00000000"` named **"Cliente General / Consumidor"** is inserted automatically on first run. Use this record for walk-in or anonymous orders.
+</Tip>
+
+### `pedido`
+
+Central order record. One `pedido` corresponds to one customer transaction.
+
+| Column | Type | Constraints | Description |
+|---|---|---|---|
+| `num_ticket` | `INTEGER` | PK, autoincrement | Unique ticket / order number |
+| `tipo_pedido` | `TipoPedidoEnum` | NOT NULL | Dine-in, pickup, or delivery |
+| `estado_orden` | `EstadoOrdenEnum` | NOT NULL, default `recibido` | Current lifecycle state of the order |
+| `id_mesa` | `INTEGER` | FK → `mesa.id_mesa`, nullable | Table assignment (null for pickup/delivery) |
+| `cedula_cliente` | `VARCHAR(20)` | FK → `cliente.cedula_cliente`, NOT NULL | Owning customer |
+| `direccion_envio` | `VARCHAR(255)` | nullable | Delivery address (populated only for `delivery` orders) |
+| `fecha_creacion` | `DATETIME` | NOT NULL, default `utcnow` | Timestamp of order placement |
+
+### `detalle_pedido`
+
+Line items for an order. Uses a **composite primary key** of `(num_ticket, id_plato)`.
+
+| Column | Type | Constraints | Description |
+|---|---|---|---|
+| `num_ticket` | `INTEGER` | PK, FK → `pedido.num_ticket` | Parent order reference |
+| `id_plato` | `INTEGER` | PK, FK → `plato.id_plato` | Dish reference |
+| `cantidad` | `INTEGER` | NOT NULL | Number of units ordered |
+| `subtotal` | `NUMERIC(8,2)` | NOT NULL | Pre-calculated line total (`precio × cantidad`) |
+
+### `factura`
+
+Invoice generated automatically when a `pedido` is created. Each order has at most one invoice (one-to-one).
+
+| Column | Type | Constraints | Description |
+|---|---|---|---|
+| `num_factura` | `INTEGER` | PK, autoincrement | Surrogate invoice number |
+| `num_ticket` | `INTEGER` | FK → `pedido.num_ticket`, UNIQUE | Parent order; uniqueness enforces the one-to-one relationship |
+| `fecha_emision` | `DATETIME` | NOT NULL, default `utcnow` | Timestamp of invoice generation |
+| `subtotal` | `NUMERIC(8,2)` | NOT NULL | Sum of all `detalle_pedido.subtotal` values |
+| `impuesto` | `NUMERIC(8,2)` | NOT NULL, default `0` | Tax amount (16% IVA computed at order creation) |
+| `total` | `NUMERIC(8,2)` | NOT NULL | `subtotal + impuesto` |
+| `estado_pago` | `EstadoPagoEnum` | NOT NULL, default `pendiente` | Payment collection status |
+| `metodo_pago` | `VARCHAR(30)` | nullable | Payment method description (e.g. `"efectivo"`, `"tarjeta"`) |
+
+---
+
+## Inventario Schema Tables (schema: `"Inventario"`)
+
+These tables live in the dedicated `Inventario` PostgreSQL schema and manage the supply chain independently from the POS tables.
+
+<Note>
+  The `"Inventario"` schema (with capital I, in quotes) is automatically created at application startup when the database dialect is PostgreSQL. All three tables are then created inside it via the same `Base.metadata.create_all` call.
+</Note>
+
+### `Inventario."Insumos"`
+
+Tracks raw ingredients and consumable supplies.
+
+| Column | Type | Constraints | Description |
+|---|---|---|---|
+| `ID_Insumos` | `BIGINT` | PK, autoincrement | Surrogate primary key |
+| `Nombre_Insumo` | `VARCHAR(100)` | NOT NULL, UNIQUE | Canonical name of the supply item |
+| `Unidad_Medida` | `VARCHAR(20)` | NOT NULL | Unit of measure (e.g. `"Kg"`, `"Litro"`, `"Paquete"`) |
+| `Stock_Actual` | `NUMERIC(12,4)` | NOT NULL, default `0` | Current quantity on hand |
+| `Stock_Minimo` | `NUMERIC(12,4)` | NOT NULL, default `0` | Minimum acceptable stock before restocking is required |
+| `Punto_Reorden` | `NUMERIC(12,4)` | NOT NULL, default `0` | Trigger threshold at which a purchase order should be raised |
+| `FK_IDCategoria` | `BIGINT` | FK → `Inventario."Categoria".ID_Categoria`, nullable | Optional supply category |
+
+### `Inventario."Proveedores"`
+
+Vendor and supplier directory.
+
+| Column | Type | Constraints | Description |
+|---|---|---|---|
+| `ID_Proveedor` | `BIGINT` | PK, autoincrement | Surrogate primary key |
+| `Nombre_Empresa` | `VARCHAR(150)` | NOT NULL | Legal company name |
+| `Identificación_RIF` | `VARCHAR(30)` | NOT NULL, UNIQUE | Venezuelan tax identification number (RIF) |
+| `Ciudad` | `VARCHAR(100)` | NOT NULL | City where the supplier operates |
+| `Telefono_Empresa` | `VARCHAR(30)` | NOT NULL | Business phone number |
+| `Email_Empresa` | `VARCHAR(100)` | NOT NULL, UNIQUE | Business email address |
+| `Direccion` | `VARCHAR(255)` | NOT NULL | Full postal or street address |
+| `Nombre_Encargado` | `VARCHAR(100)` | NOT NULL | Name of the primary contact person |
+
+<Note>
+  The physical PostgreSQL column name is `Identificación_RIF` (with tilde). The SQLAlchemy model maps it to the Python attribute `Identificacion_RIF` (without tilde) via the `Column("Identificación_RIF", ...)` constructor so that JSON serialization uses the ASCII-safe spelling.
+</Note>
+
+### `Inventario."Categoria"`
+
+Lookup table for supply item categories.
+
+| Column | Type | Constraints | Description |
+|---|---|---|---|
+| `ID_Categoria` | `BIGINT` | PK, autoincrement | Surrogate primary key |
+| `Nombre_Categoria` | `VARCHAR(100)` | NOT NULL, UNIQUE | Human-readable category label |
+
+---
+
+## ORM Relationships
+
+The following relationships are declared on the SQLAlchemy models and drive eager-loading behaviour in the routers.
+
+| Relationship | Cardinality | Cascade |
+|---|---|---|
+| `Pedido` → `Cliente` | Many-to-one | None (client outlives orders) |
+| `Pedido` → `DetallePedido` (`.detalles`) | One-to-many | `all, delete-orphan` |
+| `DetallePedido` → `Plato` | Many-to-one | None |
+| `Pedido` → `Factura` (`.factura`) | One-to-one (`uselist=False`) | None |
+| `Cliente` → `Pedido` (`.pedidos`) | One-to-many (back-populate) | None |

@@ -1,0 +1,150 @@
+---
+title: "Menu (Platos) API: List and Add Dishes to the Catalog"
+sidebarTitle: "Menu"
+description: "Browse and extend the restaurant's dish catalog — filter by category, retrieve full pricing details, and register new menu items in real time."
+---
+
+The Menu API exposes the `plato` table — the master catalog of every dish Tradiciones y Sabores serves. Front-of-house interfaces use `GET /api/platos` to populate order forms and display boards, while kitchen managers use `POST /api/platos` to add seasonal specials or permanent additions. Both endpoints are available under the `/api/productos` alias, which returns the same data in the same format for backward compatibility with older integrations.
+
+---
+
+## GET /api/platos
+
+Returns the full dish catalog. Results are not paginated. Use the `categoria` query parameter to retrieve only dishes belonging to a specific course or type.
+
+**Alias:** `GET /api/productos`
+
+### Query Parameters
+
+<ParamField query="categoria" type="string">
+  Filters results to a single dish category. Must exactly match one of the five `CategoriaPlatoEnum` string values listed in the [Category Reference](#category-reference) table below. Omit to return all dishes across every category.
+</ParamField>
+
+### Response
+
+Returns an array of dish objects. Each object contains:
+
+<ResponseField name="id_producto" type="integer">
+  Dish ID mirrored from `id_plato`. Included for compatibility with legacy clients that use the `/api/productos` alias.
+</ResponseField>
+
+<ResponseField name="id_plato" type="integer">
+  Primary key of the dish record in the `plato` table.
+</ResponseField>
+
+<ResponseField name="nombre" type="string">
+  Display name of the dish, e.g. `"Pabellón Criollo"`.
+</ResponseField>
+
+<ResponseField name="descripcion" type="string">
+  Optional description of the dish. Returns an empty string `""` when not set.
+</ResponseField>
+
+<ResponseField name="precio" type="number">
+  Price of the dish as a floating-point number, e.g. `18.50`.
+</ResponseField>
+
+<ResponseField name="categoria" type="string">
+  Category the dish belongs to. One of the five `CategoriaPlatoEnum` string values.
+</ResponseField>
+
+<ResponseField name="disponible" type="boolean">
+  Always `true` in the current implementation. Dishes can be managed by removing them from the catalog entirely.
+</ResponseField>
+
+```bash
+# All dishes
+curl -X GET http://localhost:8000/api/platos \
+  -H "Accept: application/json"
+
+# Only main courses
+curl -X GET "http://localhost:8000/api/platos?categoria=plato_principal" \
+  -H "Accept: application/json"
+
+# Only drinks, using the /api/productos alias
+curl -X GET "http://localhost:8000/api/productos?categoria=bebida" \
+  -H "Accept: application/json"
+```
+
+---
+
+## POST /api/platos
+
+Registers a new dish in the menu catalog. The request body is validated against the `PlatoIn` Pydantic schema, so `nombre`, `precio`, and `categoria` are required. The `categoria` value must be one of the five valid enum strings — invalid values will be rejected with a `422 Unprocessable Entity` error.
+
+**Response status:** `201 Created`
+
+### Request Body
+
+<ParamField body="nombre" type="string" required>
+  Display name for the dish. Maximum 100 characters. Must be a non-empty string, e.g. `"Cachapas con Queso Mano"`.
+</ParamField>
+
+<ParamField body="descripcion" type="string">
+  Optional longer description of the dish, ingredients, or preparation style. Maximum 255 characters. Omit or pass `null` to leave it blank.
+</ParamField>
+
+<ParamField body="precio" type="number" required>
+  Selling price of the dish. Stored with up to 2 decimal places, e.g. `12.75`. Must be a positive number.
+</ParamField>
+
+<ParamField body="categoria" type="string" required>
+  Course or type category. Must be exactly one of the five `CategoriaPlatoEnum` string values. See the [Category Reference](#category-reference) table below for valid options.
+</ParamField>
+
+### Response
+
+Returns the newly created dish as a `PlatoOut` object:
+
+<ResponseField name="id_plato" type="integer">
+  Auto-incremented primary key assigned to the new dish.
+</ResponseField>
+
+<ResponseField name="nombre" type="string">
+  Name of the dish as stored.
+</ResponseField>
+
+<ResponseField name="descripcion" type="string | null">
+  Description of the dish, or `null` if none was provided.
+</ResponseField>
+
+<ResponseField name="precio" type="number">
+  Price as stored in the database.
+</ResponseField>
+
+<ResponseField name="categoria" type="string">
+  Category enum value as stored.
+</ResponseField>
+
+<Note>
+  `POST /api/platos` returns a `PlatoOut` object (keys: `id_plato`, `nombre`, `descripcion`, `precio`, `categoria`) rather than the extended compatibility format returned by `GET /api/platos`. The `id_producto` and `disponible` fields are not included in the creation response.
+</Note>
+
+```bash
+curl -X POST http://localhost:8000/api/platos \
+  -H "Content-Type: application/json" \
+  -d '{
+    "nombre": "Cachapas con Queso de Mano",
+    "descripcion": "Masa de maíz tierno rellena con queso blanco artesanal, servida con mantequilla",
+    "precio": 14.50,
+    "categoria": "entrada"
+  }'
+```
+
+---
+
+## Category Reference
+
+All five valid `CategoriaPlatoEnum` values are listed below. The string values are used verbatim in both the query parameter and the request body.
+
+| Enum Member       | String Value      | Typical Examples                              |
+|-------------------|-------------------|-----------------------------------------------|
+| `entrada`         | `entrada`         | Tequeños, empanadas, sopas, ensaladas          |
+| `plato_principal` | `plato_principal` | Pabellón criollo, carne asada, pollo guisado  |
+| `postre`          | `postre`          | Quesillo, bienmesabe, torta negra              |
+| `bebida`          | `bebida`          | Jugo natural, malta, café negro, agua mineral |
+| `acompañante`     | `acompañante`     | Arroz, caraotas, tajadas, tostones            |
+
+<Tip>
+  The `acompañante` enum member is stored in the database with the ñ character (`acompañante`). Make sure your HTTP client sends the request body as UTF-8 to avoid encoding issues.
+</Tip>

@@ -1,0 +1,130 @@
+---
+title: "Tradiciones y Sabores REST API Overview"
+sidebarTitle: "Overview"
+description: "Complete reference for the FastAPI REST backend powering Tradiciones y Sabores: base URLs, CORS policy, versioning, and the full endpoint catalogue."
+---
+
+Tradiciones y Sabores exposes a **FastAPI** REST backend that listens on port **5000**. Every resource endpoint is mounted under the `/api/` prefix. Interactive documentation is available at `/api/docs` (Swagger UI) and the raw OpenAPI 3 specification is served at `/api/openapi.json`. The API is built for **internal-network use**: there is no token or session-based authentication layer — all routes are open to any caller that can reach the host.
+
+## Base URL
+
+| Environment | Base URL |
+|---|---|
+| Local development | `http://localhost:5000` |
+| Production / VPS | `http://<host>:5000` |
+
+## General Conventions
+
+- **API version:** `1.1.0` (reflected in the OpenAPI `info.version` field and the `GET /api/` health response)
+- **Content type:** All request and response bodies are `application/json`
+- **Authentication:** None — the system is designed for closed internal networks
+- **Auto-docs:** Swagger UI at `/api/docs`, OpenAPI JSON at `/api/openapi.json`
+
+## CORS Policy
+
+CORS is configured at startup via the `CORS_ORIGINS` environment variable. At runtime the middleware is applied with `allow_origins=["*"]`, permitting requests from any origin. To restrict access, set `CORS_ORIGINS` to a comma-separated list of allowed origins (e.g. `http://localhost:5173,http://158.220.100.226`).
+
+```bash
+# Example .env override
+CORS_ORIGINS=http://localhost:5173,http://192.168.1.100
+```
+
+<Note>
+  Even with `CORS_ORIGINS` scoped to specific origins in the environment, the middleware currently passes `allow_origins=["*"]` at the FastAPI level. Restricting CORS to specific hosts requires updating `main.py` to forward the parsed `origins` list to `CORSMiddleware`.
+</Note>
+
+## Health Endpoints
+
+Two lightweight endpoints confirm that the service and database connection are alive.
+
+| Method | Path | Response |
+|---|---|---|
+| `GET` | `/` | `{"status": "ok", "servicio": "Tradiciones y Sabores API", "db_integration": "nelrondon/restaurant-bd-tdb"}` |
+| `GET` | `/api/` | `{"status": "ok", "servicio": "Tradiciones y Sabores API", "version": "1.1.0"}` |
+| `GET` | `/api/debug` | DB connection status, env vars, and live `plato` row count |
+
+<Tip>
+  Use `GET /api/debug` during initial deployment to verify that all four database environment variables (`DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`) are correctly resolved and that the ORM can reach PostgreSQL.
+</Tip>
+
+## Endpoint Reference
+
+The table below lists every resource route registered in the application. Alias paths (`/api/pedidos`, `/api/productos`) behave identically to their primary counterparts and are noted separately.
+
+### Orders — `/api/ordenes`
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/api/ordenes` | List all orders; optional `?estatus=activo` filter returns only `recibido` and `preparando` states |
+| `GET` | `/api/ordenes/{num_ticket}` | Retrieve a single order by ticket number, including client info and line items |
+| `POST` | `/api/ordenes` | Create a new order with client, line items, and an auto-generated invoice |
+| `PUT` | `/api/ordenes/{num_ticket}` | Update the `estado_orden` of an existing order |
+| `DELETE` | `/api/ordenes/{num_ticket}` | Cancel and permanently remove an order along with its invoice and line items |
+
+<Note>
+  `/api/pedidos` is a registered **alias** for `/api/ordenes`. All five methods (`GET`, `GET /{num_ticket}`, `POST`, `PUT /{num_ticket}`, `DELETE /{num_ticket}`) are available on both prefixes with identical behavior.
+</Note>
+
+### Menu — `/api/platos`
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/api/platos` | List all menu items; optional `?categoria=<value>` filter by `CategoriaPlatoEnum` |
+| `POST` | `/api/platos` | Create a new menu item (dish) |
+
+<Note>
+  `/api/productos` is a registered **backward-compatibility alias** for `/api/platos`. `GET /api/productos` returns the same list with an additional `id_producto` alias field for legacy frontend support.
+</Note>
+
+### Inventory — `/api/inventario`
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/api/inventario` | List all supply items (`Insumos`) ordered by name |
+| `POST` | `/api/inventario` | Create a new inventory item |
+| `PUT` | `/api/inventario/{id}` | Update stock levels, unit, or name of an existing item |
+| `DELETE` | `/api/inventario/{id}` | Remove an inventory item (HTTP 204 No Content) |
+
+### Suppliers — `/api/proveedores`
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/api/proveedores` | List all suppliers ordered by company name |
+| `POST` | `/api/proveedores` | Register a new supplier |
+| `PUT` | `/api/proveedores/{id}` | Update supplier contact or identification details |
+| `DELETE` | `/api/proveedores/{id}` | Remove a supplier record (HTTP 204 No Content) |
+
+### Reports — `/api/reportes`
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/api/reportes/resumen` | Dashboard KPIs: total orders, gross revenue, avg. completion time, and period-over-period % change for the last 30 days |
+| `GET` | `/api/reportes/pedidos` | Filtered order list for reporting; supports `?estado=<value>` and `?periodo=hoy\|semana\|mes` |
+
+### Diagnostics
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/api/debug` | Returns DB connection status, environment variable values, and a live count of `plato` rows |
+
+---
+
+## Explore by Module
+
+<CardGroup cols={2}>
+  <Card title="Orders" icon="receipt" href="/api/orders">
+    Create, retrieve, update, and cancel orders. Includes automatic invoice generation on `POST`.
+  </Card>
+  <Card title="Menu" icon="utensils" href="/api/menu">
+    Browse and manage the restaurant's dish catalogue, filterable by category.
+  </Card>
+  <Card title="Inventory" icon="boxes-stacked" href="/api/inventory">
+    Track supply items, stock levels, reorder points, and unit measures.
+  </Card>
+  <Card title="Suppliers" icon="truck" href="/api/suppliers">
+    Manage vendor records including RIF identification, contact details, and location.
+  </Card>
+  <Card title="Reports" icon="chart-bar" href="/api/reports">
+    Dashboard KPI summaries and period-filtered order tables for analytics.
+  </Card>
+</CardGroup>

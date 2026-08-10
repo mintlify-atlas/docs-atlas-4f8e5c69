@@ -1,0 +1,61 @@
+---
+title: "Tradiciones y Sabores: All-in-One Restaurant Management"
+sidebarTitle: "Introduction"
+description: "Tradiciones y Sabores is a full-stack restaurant management platform with 7 modules for cashiers, kitchen staff, and managers."
+---
+
+Tradiciones y Sabores is a production-ready, full-stack restaurant management system built to handle every operation of a modern restaurant from a single unified platform. It combines a React 19 + TypeScript frontend, a FastAPI Python backend, and a PostgreSQL 16 database — all deployed as three isolated Docker containers orchestrated by Docker Compose. Seven purpose-built modules cover the complete restaurant workflow: from taking orders at the point of sale and displaying a customer-facing digital menu, all the way through kitchen dispatch, inventory control, supplier management, and financial reporting.
+
+## Modules
+
+<CardGroup cols={3}>
+  <Card title="POS / Caja" icon="cash-register" href="/modules/pos">
+    Take orders by table, pickup, or delivery. Filter the menu by category, build the order, and generate a printable ticket with IVA (16%) calculated automatically.
+  </Card>
+  <Card title="Customer Digital Menu" icon="mobile-screen" href="/modules/customer-menu">
+    A public self-service view at `/?view=menu` where guests browse the catalog, place orders, and track their ticket status in real time: **Recibido → En Cocina → Listo**.
+  </Card>
+  <Card title="Kitchen KDS" icon="fire-flame-curved" href="/modules/kitchen">
+    A dedicated display for kitchen staff showing all active orders with sound alerts and visual status indicators for items waiting and in preparation.
+  </Card>
+  <Card title="Order Management" icon="clipboard-list" href="/modules/orders">
+    Full ticket history with a real-time multi-field search by customer ID, name, ticket number, or phone. Filter by status and cancel orders as needed.
+  </Card>
+  <Card title="Inventory" icon="boxes-stacked" href="/modules/inventory">
+    Track ingredient and supply stock levels with visual low-stock alerts when `stock_actual ≤ stock_minimo`, unit-of-measure tracking, and reorder points.
+  </Card>
+  <Card title="Suppliers" icon="truck" href="/modules/suppliers">
+    Maintain a complete supplier directory with company name, RIF tax ID, city, phone, email, address, and contact person.
+  </Card>
+  <Card title="Reports & Analytics" icon="chart-bar" href="/modules/reports">
+    Monitor gross revenue, total sales volume, average order preparation time, and export business intelligence reports for management review.
+  </Card>
+</CardGroup>
+
+## Who Uses It
+
+Each module is designed around a specific role in the restaurant:
+
+| Role | Modules Used |
+|---|---|
+| **Cashier (Cajero)** | POS / Caja, Customer Digital Menu |
+| **Kitchen Staff (Cocinero)** | Kitchen KDS |
+| **Supervisor** | Order Management |
+| **Warehouse / Purchasing (Almacén)** | Inventory, Suppliers |
+| **Manager (Gerencia)** | Reports & Analytics, all modules |
+
+## Technology Stack
+
+Tradiciones y Sabores is built on three tightly integrated technology layers:
+
+- **Frontend** — React 19 with TypeScript, bundled by Vite 6, and served through Nginx 1.27 on port 80. The single-page application (SPA) is fully responsive across desktop, tablet, and mobile.
+- **Backend** — Python 3.12 with FastAPI 0.110+ running on Uvicorn ASGI at port 5000. All business logic, IVA calculation, and REST endpoints live here.
+- **Database** — PostgreSQL 16 Alpine at port 5432. SQLAlchemy 2.x ORM maps all relational models, and Pydantic v2 handles request/response validation.
+
+## IVA Calculation
+
+All sales processed through the POS automatically apply a **16% IVA (tax)**. The `factura` table stores the `subtotal`, `impuesto`, and `total` fields separately on every invoice, ensuring clean financial reporting and auditability.
+
+<Note>
+  On first boot, the backend automatically seeds the database with initial data: 10 sample menu items across 5 categories, 5 dining tables with locations, a default general customer (`V-00000000`), 3 inventory items, and 1 sample supplier. No manual setup is required to have a working system immediately after `docker compose up`.
+</Note>

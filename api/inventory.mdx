@@ -1,0 +1,203 @@
+---
+title: "Inventory API: Manage Supply Stock and Reorder Points"
+sidebarTitle: "Inventory"
+description: "Track ingredient stock levels, set safety minimums, and automate reorder triggers — full CRUD for the restaurant's supply inventory in real time."
+---
+
+The Inventory API manages the `Inventario.Insumos` table — the master list of every raw supply or ingredient the kitchen relies on. Each insumo record tracks its current stock level, a safety minimum, and a reorder point that signals when a new purchase order is needed. The API is intentionally flexible: all write endpoints accept both camelCase (`nombre`, `stock`, `unidad`) and PascalCase (`Nombre_Insumo`, `Stock_Actual`, `Unidad_Medida`) field names, so integrations written against either convention work without modification.
+
+---
+
+## GET /api/inventario
+
+Returns the complete list of supply items, ordered alphabetically by `Nombre_Insumo`. No filtering or pagination is applied — all records are returned in a single response.
+
+### Response
+
+Returns an array of insumo objects. Each object contains both a camelCase alias and its original PascalCase database column name for every field.
+
+<ResponseField name="id_inventario" type="integer">
+  Supply item ID, mirrored from `ID_Insumos`. Use this value as the `id_inventario` path parameter in PUT and DELETE requests.
+</ResponseField>
+
+<ResponseField name="ID_Insumos" type="integer">
+  Primary key of the record in the `Inventario.Insumos` table. Same value as `id_inventario`.
+</ResponseField>
+
+<ResponseField name="nombre" type="string">
+  Supply item name in camelCase alias form, e.g. `"Harina de maíz"`. Same value as `Nombre_Insumo`.
+</ResponseField>
+
+<ResponseField name="Nombre_Insumo" type="string">
+  Supply item name as stored in the database column.
+</ResponseField>
+
+<ResponseField name="stock" type="number">
+  Current stock level as a floating-point number, e.g. `24.5`. Same value as `Stock_Actual`. Stored with up to 4 decimal places.
+</ResponseField>
+
+<ResponseField name="Stock_Actual" type="number">
+  Current stock level from the database column.
+</ResponseField>
+
+<ResponseField name="unidad" type="string">
+  Unit of measurement abbreviation, e.g. `"Kg"`, `"L"`, `"und"`. Same value as `Unidad_Medida`.
+</ResponseField>
+
+<ResponseField name="Unidad_Medida" type="string">
+  Unit of measurement as stored in the database column.
+</ResponseField>
+
+<ResponseField name="precio_costo" type="number">
+  Always returns `0.0` in the current implementation. Cost pricing is not tracked at the insumo level in this version of the API.
+</ResponseField>
+
+<ResponseField name="stock_minimo" type="number">
+  Minimum safe stock level. If `stock` drops below this value, operations should initiate a restock. Same value as `Stock_Minimo`.
+</ResponseField>
+
+<ResponseField name="Stock_Minimo" type="number">
+  Minimum safe stock level from the database column.
+</ResponseField>
+
+<ResponseField name="Punto_Reorden" type="number">
+  The stock level at which a purchase order should be triggered, typically `Stock_Minimo × 1.5`. No camelCase alias is provided for this field.
+</ResponseField>
+
+<Note>
+  Every response object contains both camelCase and PascalCase versions of the same field (e.g. `nombre` and `Nombre_Insumo`, `stock` and `Stock_Actual`). This dual-key format is intentional and ensures backward compatibility with clients built against either naming convention. The values in each pair are always identical.
+</Note>
+
+```bash
+curl -X GET http://localhost:8000/api/inventario \
+  -H "Accept: application/json"
+```
+
+---
+
+## POST /api/inventario
+
+Creates a new supply item in the inventory. The endpoint accepts either camelCase or PascalCase key names for all fields — use whichever convention matches your client. `Punto_Reorden` defaults to `stock_minimo × 1.5` if not explicitly provided.
+
+**Response status:** `201 Created`
+
+### Request Body
+
+<ParamField body="nombre" type="string" required>
+  Name of the supply item. Also accepted as `Nombre_Insumo`. Maximum 100 characters, must be unique. Defaults to `"Insumo Nuevo"` if omitted entirely, though providing a meaningful name is strongly recommended.
+</ParamField>
+
+<ParamField body="unidad" type="string" required>
+  Unit of measurement for this supply. Also accepted as `Unidad_Medida`. Maximum 20 characters. Common values are `"Kg"`, `"g"`, `"L"`, `"ml"`, `"und"`. Defaults to `"Kg"` if omitted.
+</ParamField>
+
+<ParamField body="stock" type="number">
+  Initial stock level on hand. Also accepted as `Stock_Actual`. Defaults to `0` if omitted.
+</ParamField>
+
+<ParamField body="stock_minimo" type="number">
+  Minimum safe stock threshold. Also accepted as `Stock_Minimo`. Defaults to `0` if omitted. This value is used to auto-calculate `Punto_Reorden` when that field is not provided.
+</ParamField>
+
+<ParamField body="Punto_Reorden" type="number">
+  Stock level at which a reorder should be triggered. Defaults to `stock_minimo × 1.5` when not provided. Supply this field explicitly to override the automatic calculation.
+</ParamField>
+
+### Response
+
+Returns the newly created insumo object with the full dual-key response shape described in [GET /api/inventario](#get-apiinventario).
+
+```bash
+curl -X POST http://localhost:8000/api/inventario \
+  -H "Content-Type: application/json" \
+  -d '{
+    "nombre": "Harina de maíz precocida",
+    "unidad": "Kg",
+    "stock": 50.0,
+    "stock_minimo": 10.0,
+    "Punto_Reorden": 15.0
+  }'
+```
+
+---
+
+## PUT /api/inventario/{id_inventario}
+
+Updates one or more fields of an existing supply item. Only the fields included in the request body are modified — omitted fields retain their current values. Both camelCase and PascalCase key names are accepted for all updatable fields.
+
+### Path Parameters
+
+<ParamField path="id_inventario" type="integer" required>
+  The ID of the insumo to update. This is the `id_inventario` (or `ID_Insumos`) value from the GET response.
+</ParamField>
+
+### Request Body
+
+All fields are optional. Include only the fields you want to change.
+
+<ParamField body="nombre" type="string">
+  Updated supply item name. Also accepted as `Nombre_Insumo`.
+</ParamField>
+
+<ParamField body="unidad" type="string">
+  Updated unit of measurement. Also accepted as `Unidad_Medida`.
+</ParamField>
+
+<ParamField body="stock" type="number">
+  Updated current stock level. Also accepted as `Stock_Actual`. Use this field to record deliveries or consumption adjustments.
+</ParamField>
+
+<ParamField body="stock_minimo" type="number">
+  Updated minimum stock threshold. Also accepted as `Stock_Minimo`. Note: updating `stock_minimo` does **not** automatically recalculate `Punto_Reorden` on existing records — update `Punto_Reorden` via a subsequent request if needed.
+</ParamField>
+
+### Response
+
+Returns the full updated insumo object with the dual-key response shape. Returns `404` with `{"detail": "Insumo no encontrado"}` if no record with that ID exists.
+
+<Tip>
+  To record a stock receipt (incoming delivery), send only `{"stock": <new_total>}`. For a full restock audit, combine `stock`, `stock_minimo`, and `Punto_Reorden` in a single request.
+</Tip>
+
+```bash
+# Update stock after a delivery
+curl -X PUT http://localhost:8000/api/inventario/7 \
+  -H "Content-Type: application/json" \
+  -d '{"stock": 75.0}'
+
+# Update both stock and reorder threshold
+curl -X PUT http://localhost:8000/api/inventario/7 \
+  -H "Content-Type: application/json" \
+  -d '{
+    "stock": 75.0,
+    "stock_minimo": 15.0,
+    "Punto_Reorden": 22.5
+  }'
+```
+
+---
+
+## DELETE /api/inventario/{id_inventario}
+
+Permanently removes a supply item from the inventory. This operation returns no response body on success.
+
+**Response status:** `204 No Content`
+
+### Path Parameters
+
+<ParamField path="id_inventario" type="integer" required>
+  The ID of the insumo to delete. This is the `id_inventario` (or `ID_Insumos`) value from the GET response.
+</ParamField>
+
+### Response
+
+Returns `204 No Content` with an empty body on success. Returns `404` with `{"detail": "Insumo no encontrado"}` if no record with that ID exists.
+
+<Note>
+  Deleting an insumo is permanent and cannot be undone. If the item is temporarily out of stock, consider setting `stock` to `0` and updating `Punto_Reorden` to trigger reorder workflows rather than deleting the record entirely.
+</Note>
+
+```bash
+curl -X DELETE http://localhost:8000/api/inventario/7 \
+  -H "Accept: application/json"
+```

@@ -1,0 +1,191 @@
+---
+title: "Point of Sale (POS): Take Orders and Process Payments"
+sidebarTitle: "POS / Caja"
+description: "The POS (Caja) module is the primary cashier interface for browsing the menu, building orders, and submitting them to the kitchen."
+---
+
+The **Point of Sale (POS)** module is the main workstation for cashiers and front-of-house staff. It combines a live menu catalog with a full cart and checkout panel, letting staff capture customer details, choose an order type, review IVA-inclusive totals, and submit the order to the kitchen — all in a single split-screen view. After submission a WhatsApp comanda link is generated automatically, and the ticket number can be used to print a paper comanda.
+
+## Accessing the POS
+
+Navigate to the staff system and select **Caja / POS** from the sidebar. The POS is the default view when the app loads without a `?view` URL parameter.
+
+```
+http://localhost/          ← opens POS directly
+http://localhost/?view=pos ← explicit navigation
+```
+
+<Tip>
+  On mobile devices the interface switches to a two-tab layout — **Catálogo** and **Carrito** — so the same workflow is available on any screen size without scrolling.
+</Tip>
+
+---
+
+## Order Workflow
+
+<Steps>
+  <Step title="Fill in Customer Information">
+    Enter the client's details in the **Datos del Cliente** panel on the right side of the screen:
+
+    | Field | Required | Notes |
+    |---|---|---|
+    | `nombre` | ✅ Yes | Stored in uppercase automatically |
+    | `cedula` | No | National ID or RIF (e.g. `V-12345678`) |
+    | `telefono` | No | Used in the WhatsApp comanda link |
+  </Step>
+
+  <Step title="Select Order Type">
+    Choose how the order will be fulfilled. Each type unlocks an additional required field:
+
+    | Type | Label | Additional Field |
+    |---|---|---|
+    | `mesa` | Mesa | Table number (integer) |
+    | `pickup` | Para Llevar | None — customer picks up at the counter |
+    | `delivery` | Delivery | Full delivery address (text) |
+
+    The type is sent directly to the backend as the `tipo` field on the `Pedido` record.
+  </Step>
+
+  <Step title="Browse the Menu Catalog">
+    The left panel shows the full product catalog grouped by **category tab**. Click a tab to filter the grid:
+
+    - Entrada
+    - Plato Principal
+    - Postre
+    - Bebida
+    - Acompañante
+
+    Use the **search bar** to filter by product name or description across all categories. Items marked **Agotado** (`disponible = false`) are displayed but cannot be added to the cart.
+  </Step>
+
+  <Step title="Build the Cart">
+    Click any available product card to add it to the cart. In the cart panel you can:
+
+    - **Increase or decrease quantity** using the `+` / `−` controls.
+    - **Add special notes** per item (e.g. *sin cebolla*, *término 3/4*). Notes are stored on `DetallePedido` and appear on the Kitchen display.
+    - **Remove an item** entirely using the trash icon.
+  </Step>
+
+  <Step title="Review Totals">
+    The order summary is calculated automatically:
+
+    ```
+    Subtotal  =  Σ (precio × cantidad)
+    IVA       =  Subtotal × 0.16   (16%)
+    Total     =  Subtotal + IVA
+    ```
+
+    All three values are shown in the footer of the cart panel and are stored in the `Factura` record linked to the order.
+  </Step>
+
+  <Step title="Confirm the Order">
+    Click **Confirmar Pedido**. The POS will:
+
+    1. `POST /api/v1/ordenes` — creates the `Pedido` (state: `recibido`), persists the `DetallePedido` rows, and auto-generates a `Factura`.
+    2. Open a pre-filled **WhatsApp link** (`wa.me`) in a new tab so the cashier can send the comanda to the restaurant's WhatsApp number.
+    3. Display a success toast with the ticket number and customer name.
+    4. Reset the cart, customer fields, and delivery inputs.
+
+    The kitchen board picks up the new order on its next auto-refresh (every 30 seconds) or immediately if the staff presses **Actualizar**.
+  </Step>
+
+  <Step title="Print the Comanda (Optional)">
+    Before confirming — or after — click **Imprimir comanda** to send the current cart to the browser's print dialog. This produces a paper ticket with the order items and totals.
+  </Step>
+</Steps>
+
+---
+
+## Totals Calculation Reference
+
+| Value | Formula | Example |
+|---|---|---|
+| Subtotal | `Σ precio × cantidad` | `$25.00` |
+| IVA (16%) | `subtotal × 0.16` | `$4.00` |
+| **Total** | `subtotal + IVA` | **`$29.00`** |
+
+The `impuesto` column in the `Factura` table stores the IVA amount. The `total` column stores the grand total including IVA.
+
+---
+
+## Order Types and Required Fields
+
+| `tipo` | Customer Sees | Required in Form | Stored On |
+|---|---|---|---|
+| `mesa` | 🪑 Mesa | Table number (`mesa` integer) | `Pedido.id_mesa` |
+| `pickup` | 🛍️ Para Llevar | — | `Pedido.tipo_pedido = pickup` |
+| `delivery` | 🛵 Delivery | Delivery address (text) | `Pedido.direccion_envio` |
+
+<Note>
+  For **mesa** orders, the table number you enter is stored as `id_mesa` on the `Pedido` record and is prominently displayed on the Kitchen order card. Make sure to enter the correct table number before confirming.
+</Note>
+
+---
+
+## Backend API Reference
+
+The POS communicates with two endpoints:
+
+### Fetch the Menu Catalog
+
+```http
+GET /api/v1/platos
+x-api-key: <VITE_API_KEY>
+```
+
+Returns an array of `Producto` objects. Items that do not have a `disponible` flag are treated as available by default.
+
+### Create an Order
+
+```http
+POST /api/v1/ordenes
+Content-Type: application/json
+```
+
+```json
+{
+  "cliente_nombre": "JUAN PEREZ",
+  "cliente_cedula": "V-12345678",
+  "cliente_telefono": "0414-1234567",
+  "tipo": "mesa",
+  "mesa": 3,
+  "items": [
+    { "id_producto": 7, "cantidad": 2, "notas": "sin sal" },
+    { "id_producto": 12, "cantidad": 1 }
+  ]
+}
+```
+
+The backend resolves each `id_producto` to a `Plato` record, calculates the `subtotal` per line, and creates a linked `Factura` with `estado_pago = pendiente`. The response includes the generated `num_ticket`.
+
+### Order Response
+
+```json
+{
+  "id_pedido": 1042,
+  "num_ticket": 1042,
+  "hora_creacion": "2025-01-15T14:32:00",
+  "estado_orden": "recibido",
+  "Estatus_Orden": "Recibido",
+  "tipo": "mesa",
+  "mesa": 3,
+  "cliente_nombre": "JUAN PEREZ",
+  "subtotal": 25.00,
+  "iva": 4.00,
+  "total": 29.00,
+  "items": [...]
+}
+```
+
+---
+
+## WhatsApp Integration
+
+After a successful order submission, the POS generates a formatted WhatsApp message and opens it in a new tab via `https://wa.me/<WA_NUMERO>`. The restaurant phone number is configured through the environment variable:
+
+```bash
+# .env.local
+VITE_WHATSAPP_NUMERO=584140000000
+```
+
+The message includes the ticket number, customer name, order type, itemized list with any special notes, and the full total breakdown.

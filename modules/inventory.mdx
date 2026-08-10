@@ -1,0 +1,69 @@
+---
+title: "Inventory Management: Stock Control with Low-Stock Alerts"
+sidebarTitle: "Inventory"
+description: "Track ingredient and supply quantities in real time, receive automatic low-stock alerts, and manage insumo records with full CRUD operations."
+---
+
+The Inventory module gives kitchen and purchasing staff a live view of every ingredient and supply item (insumo) in the restaurant. Each row in the table shows the current stock level alongside the configured minimum threshold, and any item whose stock has fallen to or below that threshold is immediately flagged with a **Stock Bajo** alert—both on the individual row and as a summary count in the page header. Staff can add new items, adjust quantities, and remove discontinued supplies without leaving the view.
+
+## Insumo Fields
+
+Every supply record stored in the `Inventario.Insumos` PostgreSQL table is composed of the following fields:
+
+| Field | Type | Description |
+|---|---|---|
+| `ID_Insumos` | `bigint` (PK, auto) | Unique identifier for the supply item |
+| `Nombre_Insumo` | `varchar(100)` | Name of the ingredient or supply (unique) |
+| `Unidad_Medida` | `varchar(20)` | Unit of measurement (e.g., `Kg`, `Litro`, `Paquete`, `Unidad`) |
+| `Stock_Actual` | `numeric(12,4)` | Current quantity on hand |
+| `Stock_Minimo` | `numeric(12,4)` | Minimum acceptable stock level before an alert is raised |
+| `Punto_Reorden` | `numeric(12,4)` | Quantity at which a reorder should be placed |
+| `FK_IDCategoria` | `bigint` (FK, optional) | Category reference from `Inventario.Categoria` |
+
+<Note>
+  The Inventory tables (`Insumos`, `Proveedores`, `Categoria`) live in the dedicated **`Inventario`** PostgreSQL schema, separate from the main restaurant tables (`pedido`, `factura`, `plato`, etc.) which use the default public schema. Ensure your database user has `USAGE` and `SELECT`/`INSERT`/`UPDATE`/`DELETE` privileges on the `Inventario` schema.
+</Note>
+
+## Low-Stock Alerts
+
+The system compares `Stock_Actual` against `Stock_Minimo` for every item on every page load. When `Stock_Actual <= Stock_Minimo`:
+
+- The table row is highlighted in a red-tinted background.
+- The stock value is rendered in red instead of the primary color.
+- A **Stock Bajo** badge (with a warning icon) appears in the Status column.
+- The page header displays a banner showing the total count of low-stock items.
+
+Items with sufficient stock display a green **✓ OK** badge.
+
+<Tip>
+  Set `Stock_Minimo` to a value that gives your purchasing team enough lead time to reorder before you actually run out. A good rule of thumb is to set it equal to your average consumption over your supplier's delivery lead time—for example, if you use 10 kg of flour per day and your supplier takes 3 days to deliver, a minimum of 30 kg ensures you never hit zero.
+</Tip>
+
+## Managing Inventory Items
+
+<Steps>
+  <Step title="Add a new item">
+    Click **Agregar Ítem** in the top-right of the Inventory page. Fill in the item name, current stock quantity, unit of measure, cost price, and minimum stock level in the modal form, then click **Guardar**. The `Punto_Reorden` is automatically set to `Stock_Minimo × 1.5` if not supplied explicitly.
+  </Step>
+  <Step title="Edit an existing item">
+    Click the pencil icon (✏️) on any row to open the edit modal pre-populated with the item's current values. Adjust any field and click **Guardar** to persist the changes.
+  </Step>
+  <Step title="Delete an item">
+    Click the trash icon (🗑️) on the item row. A confirmation prompt prevents accidental deletions. This action is irreversible.
+  </Step>
+</Steps>
+
+## Supported Units of Measure
+
+The form dropdown includes the following units out of the box: `kg`, `g`, `L`, `mL`, `unidad`, `paquete`, `caja`, `bolsa`, `litro`. Selecting the correct unit at creation time ensures that stock comparisons and reorder triggers remain meaningful.
+
+## API Reference
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/api/inventario` | Return all insumos ordered by name |
+| `POST` | `/api/inventario` | Create a new insumo |
+| `PUT` | `/api/inventario/{id}` | Update one or more fields of an existing insumo |
+| `DELETE` | `/api/inventario/{id}` | Permanently delete an insumo |
+
+The `POST` and `PUT` endpoints accept both camelCase frontend keys (`nombre`, `stock`, `unidad`, `stock_minimo`) and the canonical database column names (`Nombre_Insumo`, `Stock_Actual`, `Unidad_Medida`, `Stock_Minimo`) interchangeably.

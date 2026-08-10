@@ -1,0 +1,166 @@
+---
+title: "Deploy Tradiciones y Sabores with Docker Compose"
+sidebarTitle: "Docker Compose"
+description: "Spin up the full three-service stack—PostgreSQL, FastAPI backend, and React/Nginx frontend—with a single Docker Compose command."
+---
+
+Tradiciones y Sabores ships as a three-container Docker Compose stack that mirrors its production three-layer architecture. A single `docker compose up --build -d` command builds both application images and starts the PostgreSQL database, the FastAPI backend, and the Nginx-served React frontend, wiring them together on an internal network so each service can reach the others by container name.
+
+## Prerequisites
+
+Before you begin, make sure the following are installed on your host machine:
+
+- **Docker 24+** — [Install Docker](https://docs.docker.com/get-docker/)
+- **Docker Compose v2** — bundled with Docker Desktop; on Linux install the `docker-compose-plugin`
+- **1 GB RAM minimum** — the three containers comfortably run within 512 MB each, but 1 GB total headroom is recommended
+- **Ports 80, 443, 5000, and 5432 free** on the host
+
+## Deployment Workflow
+
+<Steps>
+  <Step title="Clone the repository">
+    Pull the source code from GitHub and enter the project directory:
+
+    ```bash
+    git clone https://github.com/teofilobetancourt/Tradiciones-y-Sabores.git
+    cd Tradiciones-y-Sabores
+    ```
+  </Step>
+
+  <Step title="Create your .env file">
+    Copy the provided example file to create your local environment configuration:
+
+    ```bash
+    cp .env.example .env
+    ```
+  </Step>
+
+  <Step title="Configure environment variables">
+    Open `.env` in your editor and fill in the required values. See [Environment Variables](/deployment/environment-variables) for a full reference of every variable and its purpose.
+  </Step>
+
+  <Step title="Build and start all services">
+    Build both Docker images and start all three containers in detached mode:
+
+    ```bash
+    docker compose up --build -d
+    ```
+
+    The first run downloads the `postgres:16-alpine` and `python:3.12-slim` base images, installs Python dependencies, and compiles the React frontend with Vite. Subsequent starts skip the build unless you pass `--build` again.
+  </Step>
+
+  <Step title="Verify the deployment">
+    Once the containers are running, confirm the stack is healthy:
+
+    ```bash
+    docker compose ps
+    ```
+
+    All three services should report `running`. Then open the access URLs below to confirm each layer is responding.
+
+    | URL | Description |
+    |-----|-------------|
+    | `http://localhost` | Staff application (POS, Kitchen, Orders, Inventory, Suppliers, Reports) |
+    | `http://localhost/?view=menu` | Customer-facing digital menu with self-service ordering |
+    | `http://localhost:5000/api/docs` | Interactive Swagger UI for the FastAPI backend |
+    | `http://localhost:5000/api/debug` | Real-time PostgreSQL connection health check |
+  </Step>
+</Steps>
+
+## docker-compose.yml
+
+The full Compose file that defines all three services:
+
+```yaml
+version: '3.8'
+
+services:
+  # ── Base de Datos PostgreSQL 16 ──────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: tradiciones_sabores_db
+    restart: always
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: tradiciones_sabores
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  # ── Backend FastAPI Python ──────────────────────────────────
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: tradiciones_sabores_api
+    restart: always
+    ports:
+      - "5000:5000"
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: tradiciones_sabores
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      CORS_ORIGINS: "*"
+    depends_on:
+      - postgres
+
+  # ── Capa 1: Frontend (Nginx + React SPA) ───────────────────
+  frontend:
+    build:
+      context: ./
+      dockerfile: Dockerfile
+    container_name: tradiciones_sabores_frontend
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"
+    depends_on:
+      - backend
+
+volumes:
+  postgres_data:
+```
+
+## Service Containers
+
+| Container Name | Role | Exposed Ports |
+|----------------|------|---------------|
+| `tradiciones_sabores_db` | PostgreSQL 16 Alpine database | `5432` |
+| `tradiciones_sabores_api` | Python 3.12 / FastAPI backend served by Uvicorn | `5000` |
+| `tradiciones_sabores_frontend` | React SPA served by Nginx | `80`, `443` |
+
+The `backend` service declares `depends_on: postgres`, and `frontend` declares `depends_on: backend`, so Compose always starts the containers in the correct order.
+
+## Common Docker Commands
+
+```bash
+# Stream logs from all services
+docker compose logs -f
+
+# Stream logs from a specific service only
+docker compose logs -f backend
+
+# Stop and remove all containers (data volume is preserved)
+docker compose down
+
+# Restart only the backend after a code change
+docker compose restart backend
+
+# Rebuild and restart a single service
+docker compose up --build -d backend
+
+# Check resource usage across containers
+docker stats
+```
+
+<Note>
+  The named volume `postgres_data` stores PostgreSQL data at `/var/lib/postgresql/data` inside the container. Running `docker compose down` removes containers but **preserves** this volume, so your data survives restarts. To delete all data and start fresh, run `docker compose down -v`.
+</Note>
+
+<Tip>
+  On first startup, the FastAPI backend automatically runs `Base.metadata.create_all()` to create all seven database tables (`plato`, `mesa`, `cliente`, `insumo`, `proveedor`, `pedido`, `item_pedido`) and seeds the initial product catalogue with sample dishes. No manual migration step is required.
+</Tip>

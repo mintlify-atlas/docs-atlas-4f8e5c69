@@ -1,0 +1,161 @@
+---
+title: "Customer Digital Menu: Self-Service Ordering and Order Tracking"
+sidebarTitle: "Customer Menu"
+description: "A public-facing digital menu where customers browse the catalog, place their own orders, and track order status in real time by cedula."
+---
+
+The **Customer Digital Menu** is a fully self-contained, public-facing screen that runs completely independently from the staff system. Customers can browse the full restaurant menu, build their own orders, submit them directly to the kitchen, and then track their order's live status from the same screen — no app download or account required. It is also the only part of the system where a customer can look up any of their past or active orders using just their cedula (national ID).
+
+## Accessing the Customer Menu
+
+The customer view is activated by the `?view=menu` URL parameter. The application detects this and renders **only** the `CustomerMenuView` component — the staff sidebar, topbar, and all internal modules are completely hidden.
+
+```
+http://localhost/?view=menu
+```
+
+<Tip>
+  Display this URL as a QR code at each table or at the entrance so customers can scan and immediately access the digital menu on any device without typing anything.
+</Tip>
+
+This screen is fully responsive and works on any device:
+
+| Device | Layout |
+|---|---|
+| Desktop | Full two-column catalog with side-panel cart |
+| Tablet | Responsive grid, scrollable category pills |
+| Mobile | Single-column catalog, full-screen cart slide-over |
+
+---
+
+## Self-Service Ordering Flow
+
+<Steps>
+  <Step title="Browse the Menu Catalog">
+    When the page loads it fetches the full product catalog from `GET /api/v1/platos`. Products are displayed in a card grid and can be filtered by **category pill** at the top of the page:
+
+    | Category ID | Display Label |
+    |---|---|
+    | `todos` | 🍽️ Todo el Menú |
+    | `plato_principal` | 🍔 Platos Principales |
+    | `entrada` | 🥟 Entradas & Tapas |
+    | `acompañante` | 🍟 Acompañantes |
+    | `postre` | 🍰 Postres |
+    | `bebida` | 🥤 Bebidas & Jugos |
+
+    Use the **search bar** to filter by product name or description within any category.
+  </Step>
+
+  <Step title="Add Items to the Cart">
+    Click the **Agregar** button on any product card to add it to the cart. The cart icon in the header updates with the live item count. Items already in the cart have their quantity incremented rather than added again.
+  </Step>
+
+  <Step title="Open the Cart and Enter Delivery Details">
+    Tap **Ver Carrito** to open the checkout slide-over panel. Inside you can adjust item quantities with `+` / `−` controls (reducing to zero removes the item), then fill in the required fields:
+
+    | Field | Required | Notes |
+    |---|---|---|
+    | Cédula / RIF | ✅ Yes | Used for order lookup later |
+    | Nombre Completo | ✅ Yes | Customer full name |
+    | Teléfono | ✅ Yes | Contact phone number |
+    | Tipo de Pedido | ✅ Yes | Mesa, Pickup, or Delivery |
+    | Número de Mesa | If mesa | Chosen from a dropdown (Mesas 1–5) |
+    | Dirección de Entrega | If delivery | Free text address field |
+  </Step>
+
+  <Step title="Review Totals and Submit">
+    The cart footer shows a live breakdown:
+
+    ```
+    Subtotal  =  Σ (precio × cantidad)
+    IVA       =  Subtotal × 0.16   (16%)
+    Total     =  Subtotal + IVA
+    ```
+
+    Tap **Confirmar y Enviar Pedido** to `POST /api/v1/ordenes`. On success the cart clears and the **Live Order Tracker** appears at the top of the page automatically.
+  </Step>
+
+  <Step title="Track the Order in Real Time">
+    Once the order is submitted the tracker panel appears immediately. It polls `GET /api/v1/ordenes/{num_ticket}` every **5 seconds** and reflects the current `estado_orden` without requiring a manual refresh. A progress bar visually advances through the three active states.
+  </Step>
+</Steps>
+
+---
+
+## Order Status Reference
+
+| `estado_orden` | Display Label | Progress Bar | Meaning |
+|---|---|---|---|
+| `recibido` | 📌 1. Recibido | 33% | Order received by the system, waiting for kitchen to start |
+| `preparando` | 🔥 2. En Cocina | 66% | Kitchen staff clicked **Iniciar preparación** |
+| `listo` | ✅ 3. Listo / Despachado | 100% | Kitchen staff clicked **Despachar** — ready to serve |
+| `entregado` | ⬛ Entregado | — | Order delivered (shown in lookup history) |
+| `cancelado` | 🟥 Cancelado | — | Order was cancelled (shown in lookup history) |
+
+---
+
+## Order Lookup by Cédula
+
+Customers who already placed an order (in a previous session or at the POS) can look it up without creating a new order.
+
+<Steps>
+  <Step title="Open the Search Panel">
+    Click the **Buscar mi Pedido** button in the page header. A modal dialog appears with an input field for the cedula number.
+  </Step>
+
+  <Step title="Enter Cedula and Search">
+    Type the cedula (e.g. `V-12345678` or just `12345678`). The search normalizes the input by stripping non-alphanumeric characters before matching, so formatting differences do not prevent a match.
+
+    The lookup calls `GET /api/v1/ordenes` and filters client-side against the `cliente_cedula` field. Results are sorted newest-first.
+  </Step>
+
+  <Step title="Review Found Orders">
+    Each found order card shows the ticket number, order type, total amount, and a color-coded status badge. Click **Ver Seguimiento en Vivo** on any card to dismiss the modal and attach that order to the real-time tracker on the main page.
+  </Step>
+</Steps>
+
+<Note>
+  The cedula lookup fetches **all** orders and filters client-side. If the restaurant has a very large order history this may be slow on low-bandwidth connections. The search is intended as a convenience feature and does not expose any sensitive data beyond what the customer themselves submitted.
+</Note>
+
+---
+
+## Isolation from the Staff System
+
+The customer view intentionally has **no access** to any staff functionality:
+
+- No sidebar, no topbar, no navigation links to POS / Kitchen / Inventory.
+- No API key is sent with the order creation or lookup requests — the orders endpoint is public.
+- The URL `?view=menu` is the only entry point. Any other `?view=` value (e.g. `pos`, `kitchen`) opens the staff system instead.
+
+---
+
+## Backend API Calls
+
+| Action | Method | Endpoint | Auth |
+|---|---|---|---|
+| Load menu catalog | `GET` | `/api/v1/platos` | API key required |
+| Place an order | `POST` | `/api/v1/ordenes` | Public |
+| Poll order status | `GET` | `/api/v1/ordenes/{num_ticket}` | Public |
+| Lookup by cedula | `GET` | `/api/v1/ordenes` | Public |
+
+### Example: Place an Order from the Customer Menu
+
+```json
+POST /api/v1/ordenes
+Content-Type: application/json
+
+{
+  "cliente_nombre": "Maria Delgado",
+  "cliente_cedula": "V-12345678",
+  "cliente_telefono": "0414-1234567",
+  "tipo": "mesa",
+  "mesa": 3,
+  "items": [
+    { "id_producto": 5, "cantidad": 1 },
+    { "id_producto": 11, "cantidad": 2 }
+  ]
+}
+```
+
+The backend returns the full order object including `num_ticket`, which the frontend stores in component state to drive the live tracker polling loop.

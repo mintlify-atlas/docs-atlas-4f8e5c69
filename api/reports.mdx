@@ -1,0 +1,242 @@
+---
+title: "Reports API: KPI Summary and Filtered Order Analytics"
+sidebarTitle: "Reports"
+description: "Fetch rolling 30-day KPI summaries, filter order history by period and status, and verify database connectivity with the Reports API."
+---
+
+The Reports API powers the Tradiciones y Sabores analytics dashboard. It exposes three endpoints: a KPI summary that compares the current 30-day window against the prior period, a flexible order-history query with period and status filters, and a lightweight health-check endpoint that confirms the backend's connection to PostgreSQL. All timestamps are handled in UTC, and percentage-change calculations degrade gracefully when the prior period contains no data.
+
+---
+
+## GET /api/reportes/resumen
+
+Returns a five-field KPI snapshot covering the **rolling last 30 days** compared against the immediately preceding 30-day period (days 31–60 in the past). Use this endpoint to populate dashboard cards showing revenue trends, order volume, and kitchen throughput.
+
+<Tip>
+  If the prior 30-day period has zero orders or zero revenue, the corresponding percentage-change field returns `100.0` when the current period has activity, or `0.0` when both periods are empty. This prevents division-by-zero errors on a freshly deployed system.
+</Tip>
+
+```bash
+curl -X GET https://your-api-host/api/reportes/resumen \
+  -H "Accept: application/json"
+```
+
+### Response
+
+<ResponseField name="total_pedidos" type="integer">
+  Number of orders (`pedido` rows) whose `fecha_creacion` falls within the last 30 days.
+</ResponseField>
+
+<ResponseField name="ingresos_brutos" type="float">
+  Sum of `factura.total` for all invoices linked to orders created in the last 30 days. Returns `0.0` if no invoices exist for the period.
+</ResponseField>
+
+<ResponseField name="tiempo_promedio_seg" type="float">
+  Average elapsed time in seconds from `fecha_creacion` to the moment the report is generated, measured only across orders that have reached `listo` or `entregado` status within the last 30 days. Returns `0.0` if no completed orders exist in the window.
+</ResponseField>
+
+<ResponseField name="pct_cambio_pedidos" type="float">
+  Percentage change in order count between the current and prior 30-day periods, rounded to one decimal place. Positive values indicate growth; negative values indicate a decline.
+</ResponseField>
+
+<ResponseField name="pct_cambio_ingresos" type="float">
+  Percentage change in gross revenue between the current and prior 30-day periods, rounded to one decimal place.
+</ResponseField>
+
+**Example response**
+
+```json
+{
+  "total_pedidos": 312,
+  "ingresos_brutos": 148750.50,
+  "tiempo_promedio_seg": 1823.4,
+  "pct_cambio_pedidos": 12.5,
+  "pct_cambio_ingresos": -3.1
+}
+```
+
+---
+
+## GET /api/reportes/pedidos
+
+Returns an array of order objects filtered by time period and/or order status. This endpoint drives the filterable orders table in the analytics dashboard and accepts the same optional query parameters independently — you can filter by period alone, status alone, or both together.
+
+Orders are returned in descending ticket number order (most recent first). Each element in the array has the same shape as the responses from `GET /api/ordenes`.
+
+```bash
+curl -X GET "https://your-api-host/api/reportes/pedidos?periodo=semana&estado=preparando" \
+  -H "Accept: application/json"
+```
+
+### Query parameters
+
+<ParamField query="periodo" type="string">
+  Time window to filter orders by `fecha_creacion`. Accepted values:
+
+  | Value | Window |
+  |-------|--------|
+  | `hoy` | From midnight of the current day (UTC) to now |
+  | `semana` | Last 7 days from now |
+  | `mes` | Last 30 days from now *(default)* |
+
+  Defaults to `mes` (last 30 days) when omitted or when an unrecognised value is provided.
+</ParamField>
+
+<ParamField query="estado" type="string">
+  Filter by order status. Accepted values: `recibido`, `preparando`, `listo`, `entregado`, or `Todos`. When set to `Todos` or omitted entirely, orders of all statuses are returned.
+</ParamField>
+
+### Response
+
+Returns a JSON array of order objects. Each object matches the `PedidoOut` schema and includes the following fields:
+
+<ResponseField name="num_ticket" type="integer">
+  Auto-incremented primary key and ticket number for the order.
+</ResponseField>
+
+<ResponseField name="tipo_pedido" type="string">
+  Order type: `mesa`, `pickup`, or `delivery`.
+</ResponseField>
+
+<ResponseField name="estado_orden" type="string">
+  Current kitchen/delivery status: `recibido`, `preparando`, `listo`, or `entregado`.
+</ResponseField>
+
+<ResponseField name="id_mesa" type="integer | null">
+  Table ID for dine-in orders. `null` for pickup or delivery.
+</ResponseField>
+
+<ResponseField name="cedula_cliente" type="string">
+  Venezuelan national ID or identifier of the customer who placed the order.
+</ResponseField>
+
+<ResponseField name="direccion_envio" type="string | null">
+  Delivery address for `delivery`-type orders. `null` otherwise.
+</ResponseField>
+
+<ResponseField name="fecha_creacion" type="string">
+  ISO 8601 UTC timestamp of when the order was created.
+</ResponseField>
+
+<ResponseField name="cliente" type="object | null">
+  Nested customer object with `cedula_cliente`, `nombre`, `telefono`, `email`, and `direccion_habitual`.
+</ResponseField>
+
+<ResponseField name="detalles" type="array">
+  Array of line-item objects, each containing `num_ticket`, `id_plato`, `cantidad`, `subtotal`, and a nested `plato` object with dish details.
+</ResponseField>
+
+**Example response**
+
+```json
+[
+  {
+    "num_ticket": 88,
+    "tipo_pedido": "mesa",
+    "estado_orden": "preparando",
+    "id_mesa": 3,
+    "cedula_cliente": "V-18340921",
+    "direccion_envio": null,
+    "fecha_creacion": "2025-01-14T19:32:05.000Z",
+    "cliente": {
+      "cedula_cliente": "V-18340921",
+      "nombre": "Ana Rivas",
+      "telefono": "0416-7823041",
+      "email": "ana.rivas@email.com",
+      "direccion_habitual": null
+    },
+    "detalles": [
+      {
+        "num_ticket": 88,
+        "id_plato": 5,
+        "cantidad": 2,
+        "subtotal": 48.00,
+        "plato": {
+          "id_plato": 5,
+          "nombre": "Pabellón Criollo",
+          "descripcion": "Arroz, caraotas, carne mechada y tajadas",
+          "precio": 24.00,
+          "categoria": "plato_principal"
+        }
+      }
+    ]
+  }
+]
+```
+
+---
+
+## GET /api/debug
+
+Health-check endpoint that verifies environment configuration and confirms whether the application can reach the PostgreSQL database. Returns the values of all four connection environment variables alongside a live connection test result.
+
+<Note>
+  This endpoint performs a real query (`SELECT COUNT(*) FROM plato`) on every call to confirm the database session is functional. In production environments, restrict access to this endpoint to internal network calls or authenticated admin users, as it exposes database host and credential metadata.
+</Note>
+
+```bash
+curl -X GET https://your-api-host/api/debug \
+  -H "Accept: application/json"
+```
+
+### Response
+
+<ResponseField name="environment" type="object">
+  Object containing the four database connection environment variables read at request time.
+
+  <Expandable title="environment fields">
+    <ResponseField name="DB_HOST" type="string">
+      Hostname or IP address of the PostgreSQL server. Defaults to `"NOT_SET"` if the environment variable is absent.
+    </ResponseField>
+
+    <ResponseField name="DB_PORT" type="string">
+      Port the PostgreSQL server is listening on. Defaults to `"NOT_SET"` if absent.
+    </ResponseField>
+
+    <ResponseField name="DB_NAME" type="string">
+      Name of the target database. Defaults to `"NOT_SET"` if absent.
+    </ResponseField>
+
+    <ResponseField name="DB_USER" type="string">
+      Database username. Defaults to `"NOT_SET"` if absent.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="db_connection" type="string">
+  Result of the live connectivity probe. Returns a string beginning with `"CONNECTED"` (e.g. `"CONNECTED (Platos count: 42)"`) on success, or `"FAILED"` if the connection or query raised an exception.
+</ResponseField>
+
+<ResponseField name="db_error" type="string | null">
+  Exception message including the exception type if `db_connection` is `"FAILED"`. `null` when the connection succeeds.
+</ResponseField>
+
+**Example response — healthy**
+
+```json
+{
+  "environment": {
+    "DB_HOST": "db.internal.tradicionesysabores.com",
+    "DB_PORT": "5432",
+    "DB_NAME": "restaurante_db",
+    "DB_USER": "api_user"
+  },
+  "db_connection": "CONNECTED (Platos count: 18)",
+  "db_error": null
+}
+```
+
+**Example response — connection failure**
+
+```json
+{
+  "environment": {
+    "DB_HOST": "NOT_SET",
+    "DB_PORT": "NOT_SET",
+    "DB_NAME": "NOT_SET",
+    "DB_USER": "NOT_SET"
+  },
+  "db_connection": "FAILED",
+  "db_error": "OperationalError: could not connect to server: Connection refused"
+}
+```

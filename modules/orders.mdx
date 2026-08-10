@@ -1,0 +1,87 @@
+---
+title: "Order Management: History, Search, and Status Control"
+sidebarTitle: "Orders"
+description: "Browse, search, and manage every order in Tradiciones y Sabores—filter by status, inspect line items, and cancel orders from one unified view."
+---
+
+The Orders module is the operational backbone of Tradiciones y Sabores. It surfaces every order ever placed in the system—across all service types—and lets staff quickly locate a specific ticket by customer name, ID number, phone, or ticket number without leaving the page. Supervisors can drill into any order to review line-item details, tax breakdown, and delivery information, and can cancel an order with a single confirmation when needed.
+
+## Searching for Orders
+
+The search bar at the top of the view performs real-time, multi-field filtering across the full order list. Special characters and hyphens are stripped automatically before matching, so searching `V12345678` and `V-12345678` both return the same results.
+
+| Search field | Description | Example query |
+|---|---|---|
+| `num_ticket` | Unique numeric ticket identifier | `1042` |
+| `cliente_nombre` | Customer's full name (partial match) | `María González` |
+| `cliente_cedula` | Venezuelan national ID (cedula) | `V-12345678` |
+| `cliente_telefono` | Customer phone number | `0414-9876543` |
+
+Click **Limpiar** or clear the input to reset the search and show all orders.
+
+## Filtering by Status
+
+Status filter buttons appear above the order list. Each button shows a live count of orders in that state. Clicking an active filter a second time deactivates it and returns to the unfiltered view.
+
+| Status value | Meaning | Badge color |
+|---|---|---|
+| `recibido` | Order has been placed and is awaiting kitchen pickup | Gray |
+| `preparando` | Kitchen is actively preparing the order | Amber |
+| `listo` | Order is ready for pickup or table delivery | Green |
+| `entregado` | Order has been delivered to the customer | — |
+
+The **Todos** option clears any active status filter and shows the full history. The three quick-count cards at the top of the page also act as shortcuts for **Recibido**, **Preparando**, and **Listo**.
+
+## Order Card Details
+
+Each order is displayed as a collapsible card. The collapsed row shows the ticket number, service type badge, customer name, phone, total, timestamp, and status at a glance. Clicking the row expands the full detail view.
+
+### Service Types
+
+| Type | Label | Description |
+|---|---|---|
+| `mesa` | 🪑 Mesa | Dine-in table service |
+| `pickup` | 🛍️ Para Llevar | Customer picks up at the counter |
+| `delivery` | 🛵 Delivery | Order delivered to a street address |
+
+### Expanded Order View
+
+The expanded section contains:
+
+- **Customer info** — cedula, phone number, table number (mesa orders), or delivery address (delivery orders)
+- **Line-item table** — each item's name, optional notes, quantity, unit price, and line subtotal
+- **Tax footer** — IVA at **16%** calculated on the pre-tax subtotal
+- **Order total** — subtotal + IVA
+
+<Steps>
+  <Step title="Locate the order">
+    Type a ticket number, customer name, cedula, or phone number in the search bar. The list filters in real time.
+  </Step>
+  <Step title="Expand the card">
+    Click anywhere on the order row to reveal line items, customer details, and the tax breakdown.
+  </Step>
+  <Step title="Review line items">
+    Confirm quantities, unit prices, and any special preparation notes shown in red next to the item name.
+  </Step>
+  <Step title="Cancel if necessary">
+    If the order has not yet reached **Listo** status, a **Cancelar pedido** button appears in the bottom-right of the expanded view. Cancellation requires confirmation and permanently removes the order, its line items, and its associated invoice.
+  </Step>
+</Steps>
+
+<Note>
+  The **Cancelar pedido** button is hidden once an order reaches **Listo** status. Only supervisors with the appropriate role should perform cancellations, as the action is irreversible and removes the order from all financial records.
+</Note>
+
+## API Reference
+
+Programmatic access to order data is available through the orders router. Both `/api/ordenes` and `/api/pedidos` are supported as aliases.
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/api/ordenes` | Return all orders, optionally filtered by `?estatus=activo` |
+| `GET` | `/api/ordenes/{num_ticket}` | Return a single order by ticket number |
+| `POST` | `/api/ordenes` | Create a new order (auto-creates customer if not found) |
+| `PUT` | `/api/ordenes/{num_ticket}` | Update the order's `estado_orden` |
+| `DELETE` | `/api/ordenes/{num_ticket}` | Cancel and permanently delete an order |
+
+Pass `?estatus=activo` to `GET /api/ordenes` to retrieve only orders in `recibido` or `preparando` state—useful for kitchen display systems.

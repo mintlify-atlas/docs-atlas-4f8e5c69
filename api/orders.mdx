@@ -1,0 +1,320 @@
+---
+title: "Orders API: Create, Track, and Cancel Restaurant Orders"
+sidebarTitle: "Orders"
+description: "Full CRUD API for restaurant orders — create orders with client info and line items, track live status, and cancel with automatic cascade cleanup."
+---
+
+The Orders API is the central nervous system of Tradiciones y Sabores. Every order placed — whether at a table, picked up at the counter, or sent out for delivery — flows through these five endpoints. Orders are created with full client information and line items, automatically generating an associated invoice with 16% IVA. All endpoints are available under both `/api/ordenes` and the `/api/pedidos` alias for backward compatibility.
+
+---
+
+## GET /api/ordenes
+
+Retrieves all orders in the system, sorted by ticket number descending (newest first). Pass `estatus=activo` to narrow results to only orders that are currently in-progress.
+
+**Alias:** `GET /api/pedidos`
+
+### Query Parameters
+
+<ParamField query="estatus" type="string">
+  Filter orders by activity state. The only recognized value is `activo`, which returns only orders whose `estado_orden` is `recibido` or `preparando`. Omit this parameter to return all orders regardless of status.
+</ParamField>
+
+### Response
+
+Returns an array of order objects. Each object contains:
+
+<ResponseField name="id_pedido" type="integer">
+  Ticket number, mirrored from `num_ticket` for compatibility with older clients.
+</ResponseField>
+
+<ResponseField name="num_ticket" type="integer">
+  Primary identifier for the order. Used as the path parameter in all other endpoints.
+</ResponseField>
+
+<ResponseField name="hora_creacion" type="string">
+  ISO 8601 timestamp of when the order was created (UTC), e.g. `"2024-11-15T19:30:00"`.
+</ResponseField>
+
+<ResponseField name="cliente_nombre" type="string">
+  Full name of the customer. Defaults to `"Cliente General"` if the client record is missing.
+</ResponseField>
+
+<ResponseField name="cliente_cedula" type="string">
+  National ID (cédula) of the customer, e.g. `"V-12345678"`.
+</ResponseField>
+
+<ResponseField name="cliente_telefono" type="string">
+  Phone number on file for the customer.
+</ResponseField>
+
+<ResponseField name="tipo" type="string">
+  Order type string. Same value as `tipo_pedido`, included for compatibility.
+</ResponseField>
+
+<ResponseField name="tipo_pedido" type="string">
+  Order fulfillment type. One of `mesa`, `pickup`, or `delivery`.
+</ResponseField>
+
+<ResponseField name="mesa" type="integer | null">
+  Table number assigned to the order. Same value as `id_mesa`.
+</ResponseField>
+
+<ResponseField name="id_mesa" type="integer | null">
+  Foreign key referencing the `mesa` table. `null` for pickup and delivery orders.
+</ResponseField>
+
+<ResponseField name="direccion" type="string | null">
+  Delivery address. Same value as `direccion_envio`. `null` for mesa and pickup orders.
+</ResponseField>
+
+<ResponseField name="direccion_envio" type="string | null">
+  Full delivery address string. Only populated when `tipo_pedido` is `delivery`.
+</ResponseField>
+
+<ResponseField name="items" type="array">
+  Line items attached to the order. Each element contains:
+
+  <ResponseField name="items[].id_producto" type="integer">
+    Dish ID, mirrored from `id_plato`.
+  </ResponseField>
+  <ResponseField name="items[].id_plato" type="integer">
+    Primary key of the `plato` record.
+  </ResponseField>
+  <ResponseField name="items[].nombre" type="string">
+    Dish name resolved from the `plato` table. Falls back to `"Plato #<id>"` if the record is missing.
+  </ResponseField>
+  <ResponseField name="items[].cantidad" type="integer">
+    Quantity ordered.
+  </ResponseField>
+  <ResponseField name="items[].precio_unitario" type="number">
+    Unit price at the time of ordering, sourced from `plato.precio`.
+  </ResponseField>
+  <ResponseField name="items[].subtotal" type="number">
+    Line total (`precio_unitario × cantidad`), rounded to two decimal places.
+  </ResponseField>
+</ResponseField>
+
+<ResponseField name="subtotal" type="number">
+  Sum of all line item subtotals before tax.
+</ResponseField>
+
+<ResponseField name="iva" type="number">
+  Value-added tax at 16% (`subtotal × 0.16`), rounded to two decimal places.
+</ResponseField>
+
+<ResponseField name="total" type="number">
+  Final amount due (`subtotal + iva`), rounded to two decimal places.
+</ResponseField>
+
+<ResponseField name="Estatus_Orden" type="string">
+  Capitalized status string for display purposes, e.g. `"Recibido"`. Same state as `estado_orden`.
+</ResponseField>
+
+<ResponseField name="estado_orden" type="string">
+  Lowercase status string. One of `recibido`, `preparando`, `listo`, or `entregado`.
+</ResponseField>
+
+```bash
+# All orders
+curl -X GET http://localhost:8000/api/ordenes \
+  -H "Accept: application/json"
+
+# Only active orders (recibido or preparando)
+curl -X GET "http://localhost:8000/api/ordenes?estatus=activo" \
+  -H "Accept: application/json"
+```
+
+---
+
+## GET /api/ordenes/{num_ticket}
+
+Retrieves a single order by its ticket number. Returns the identical object shape as the list endpoint.
+
+**Alias:** `GET /api/pedidos/{num_ticket}`
+
+### Path Parameters
+
+<ParamField path="num_ticket" type="integer" required>
+  The ticket number of the order to retrieve. This is the `num_ticket` value returned when the order was created.
+</ParamField>
+
+### Response
+
+Returns a single order object with all the fields described in [GET /api/ordenes](#get-apiordenes).
+
+Returns `404` with `{"detail": "Orden / Pedido no encontrado"}` if no order with that ticket number exists.
+
+```bash
+curl -X GET http://localhost:8000/api/ordenes/42 \
+  -H "Accept: application/json"
+```
+
+---
+
+## POST /api/ordenes
+
+Creates a new order. The server resolves or auto-creates the customer by `cedula_cliente`, assigns `estado_orden = recibido`, builds `DetallePedido` rows for every item, and generates an associated `Factura` with 16% IVA — all in a single atomic transaction.
+
+**Alias:** `POST /api/pedidos`
+
+**Response status:** `201 Created`
+
+### Request Body
+
+<ParamField body="cedula_cliente" type="string">
+  Customer national ID (cédula). Also accepted as `cliente_cedula`. Defaults to `"V-00000000"` if omitted. If a `Cliente` record with this cédula already exists, it is reused; otherwise a new one is created automatically.
+</ParamField>
+
+<ParamField body="cliente_nombre" type="string">
+  Customer full name. Also accepted as `nombre_cliente`. Defaults to `"Cliente Consumidor"`. Only used when creating a new client record.
+</ParamField>
+
+<ParamField body="cliente_telefono" type="string">
+  Customer phone number. Also accepted as `telefono`. Defaults to `"0000000000"`.
+</ParamField>
+
+<ParamField body="tipo_pedido" type="string" required>
+  Fulfillment type. Also accepted as `tipo`. Must be one of `mesa`, `pickup`, or `delivery`. Unrecognized values silently fall back to `mesa`.
+</ParamField>
+
+<ParamField body="id_mesa" type="integer">
+  Table number for dine-in orders. Also accepted as `mesa`. Pass `null` or omit for pickup and delivery.
+</ParamField>
+
+<ParamField body="direccion_envio" type="string">
+  Full delivery address. Also accepted as `direccion`. Required when `tipo_pedido` is `delivery`; ignored for other types.
+</ParamField>
+
+<ParamField body="items" type="array" required>
+  Line items for the order. Also accepted as `detalles`. Each element must contain:
+
+  <ParamField body="items[].id_plato" type="integer" required>
+    ID of the dish being ordered. Also accepted as `id_producto`.
+  </ParamField>
+  <ParamField body="items[].cantidad" type="integer" required>
+    Quantity of this dish. Defaults to `1` if omitted.
+  </ParamField>
+  <ParamField body="items[].precio_unitario" type="number">
+    Override unit price. If the `id_plato` resolves to a `Plato` record, `plato.precio` is used and this field is ignored. Only applied when the plato cannot be found.
+  </ParamField>
+</ParamField>
+
+### Response
+
+Returns the full order object (same shape as GET) with the newly assigned `num_ticket` and invoice totals pre-calculated.
+
+<Tip>
+  The invoice (`Factura`) is created automatically with `estado_pago = pendiente`. Use the Billing API to update payment status once the customer settles the bill.
+</Tip>
+
+```bash
+# Mesa order
+curl -X POST http://localhost:8000/api/ordenes \
+  -H "Content-Type: application/json" \
+  -d '{
+    "cedula_cliente": "V-12345678",
+    "cliente_nombre": "María González",
+    "cliente_telefono": "0414-5551234",
+    "tipo_pedido": "mesa",
+    "id_mesa": 5,
+    "items": [
+      {"id_plato": 3, "cantidad": 2},
+      {"id_plato": 7, "cantidad": 1}
+    ]
+  }'
+
+# Delivery order
+curl -X POST http://localhost:8000/api/ordenes \
+  -H "Content-Type: application/json" \
+  -d '{
+    "cedula_cliente": "E-87654321",
+    "cliente_nombre": "Carlos Romero",
+    "cliente_telefono": "0212-5559876",
+    "tipo_pedido": "delivery",
+    "direccion_envio": "Av. Principal de Los Ruices, Torre Norte, Piso 4, Caracas",
+    "items": [
+      {"id_plato": 1, "cantidad": 1},
+      {"id_plato": 9, "cantidad": 3}
+    ]
+  }'
+```
+
+---
+
+## PUT /api/ordenes/{num_ticket}
+
+Updates the `estado_orden` of an existing order. This is the primary endpoint used by kitchen and delivery staff to advance an order through its lifecycle.
+
+**Alias:** `PUT /api/pedidos/{num_ticket}`
+
+### Path Parameters
+
+<ParamField path="num_ticket" type="integer" required>
+  The ticket number of the order to update.
+</ParamField>
+
+### Request Body
+
+<ParamField body="estado_orden" type="string" required>
+  New order status. Also accepted as `Estatus_Orden` or `estatus`. Must be one of:
+  - `recibido` — Order received, awaiting preparation
+  - `preparando` — Kitchen is actively preparing the order
+  - `listo` — Order is ready for pickup or delivery
+  - `entregado` — Order has been delivered to the customer
+
+  Values are matched case-insensitively. Unrecognized values leave the status unchanged.
+</ParamField>
+
+### Response
+
+<ResponseField name="status" type="string">
+  Always `"ok"` on success.
+</ResponseField>
+
+<ResponseField name="num_ticket" type="integer">
+  The ticket number of the updated order, echoed back for confirmation.
+</ResponseField>
+
+Returns `404` if the order does not exist.
+
+```bash
+curl -X PUT http://localhost:8000/api/ordenes/42 \
+  -H "Content-Type: application/json" \
+  -d '{"estado_orden": "preparando"}'
+```
+
+---
+
+## DELETE /api/ordenes/{num_ticket}
+
+Permanently removes an order and all of its associated records. The deletion is performed in relational order — `Factura` first, then `DetallePedido` rows, then the `Pedido` itself — to respect foreign key constraints.
+
+**Alias:** `DELETE /api/pedidos/{num_ticket}`
+
+<Note>
+  This operation is irreversible. The linked invoice and all line items are deleted along with the order. Consider updating `estado_orden` to `entregado` instead of deleting if you need an audit trail.
+</Note>
+
+### Path Parameters
+
+<ParamField path="num_ticket" type="integer" required>
+  The ticket number of the order to delete.
+</ParamField>
+
+### Response
+
+<ResponseField name="status" type="string">
+  Always `"deleted"` on success.
+</ResponseField>
+
+<ResponseField name="num_ticket" type="integer">
+  The ticket number of the deleted order, echoed back for confirmation.
+</ResponseField>
+
+Returns `404` with `{"detail": "Orden / Pedido no encontrado"}` if no order with that ticket number exists.
+
+```bash
+curl -X DELETE http://localhost:8000/api/ordenes/42 \
+  -H "Accept: application/json"
+```

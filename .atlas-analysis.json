@@ -1,0 +1,84 @@
+{
+  "projectType": "saas",
+  "projectName": "Tradiciones y Sabores",
+  "projectDescription": "A full-stack restaurant management system with POS, kitchen display, customer digital menu, inventory control, supplier directory, and financial reporting — built with React 19 + FastAPI + PostgreSQL and deployable via Docker Compose.",
+  "theme": "almond",
+  "primaryColor": "#eb641c",
+  "lightColor": "#f4b48c",
+  "darkColor": null,
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Getting Started",
+        "groups": [
+          {
+            "group": "Overview",
+            "pages": ["introduction", "architecture"]
+          },
+          {
+            "group": "Deployment",
+            "pages": ["deployment/docker-compose", "deployment/environment-variables", "deployment/nginx"]
+          }
+        ]
+      },
+      {
+        "tab": "System Modules",
+        "groups": [
+          {
+            "group": "Point of Sale",
+            "pages": ["modules/pos", "modules/customer-menu", "modules/kitchen"]
+          },
+          {
+            "group": "Operations",
+            "pages": ["modules/orders", "modules/inventory", "modules/suppliers", "modules/reports"]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "API Overview",
+            "pages": ["api/overview", "api/data-models"]
+          },
+          {
+            "group": "Endpoints",
+            "pages": ["api/orders", "api/menu", "api/inventory", "api/suppliers", "api/reports"]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Point of Sale (POS) with IVA (16%) calculation and printable order tickets",
+    "Customer-facing digital menu with self-service ordering and real-time order tracking",
+    "Kitchen Display System (KDS) with audio alerts for incoming orders",
+    "Multi-field order history search (by cedula, name, ticket, phone)",
+    "Inventory management with low-stock visual alerts (stock <= stock_minimo)",
+    "Supplier directory with RIF, contact, and company information",
+    "Financial reports and KPI dashboard with period-over-period comparison",
+    "3-layer Docker architecture: React/Nginx → FastAPI/Uvicorn → PostgreSQL 16",
+    "Automatic database schema creation and seed data on first boot",
+    "Supports Mesa, Pickup, and Delivery order types"
+  ],
+  "publicApiSurface": [
+    "GET /api/ordenes — list all orders (filterable by estatus=activo)",
+    "GET /api/ordenes/{num_ticket} — get single order by ticket number",
+    "POST /api/ordenes — create new order with client, items, and invoice",
+    "PUT /api/ordenes/{num_ticket} — update order status (recibido/preparando/listo/entregado)",
+    "DELETE /api/ordenes/{num_ticket} — cancel and delete an order",
+    "GET /api/platos — list menu items (filterable by categoria)",
+    "POST /api/platos — create a new menu item",
+    "GET /api/inventario — list all inventory items",
+    "POST /api/inventario — create new inventory item",
+    "PUT /api/inventario/{id} — update inventory item stock/details",
+    "DELETE /api/inventario/{id} — delete inventory item",
+    "GET /api/proveedores — list suppliers",
+    "POST /api/proveedores — create supplier",
+    "PUT /api/proveedores/{id} — update supplier",
+    "DELETE /api/proveedores/{id} — delete supplier",
+    "GET /api/reportes/resumen — KPI summary (revenue, orders, avg prep time)",
+    "GET /api/reportes/pedidos — filtered order report by period and status",
+    "GET /api/debug — database connection health check"
+  ]
+}

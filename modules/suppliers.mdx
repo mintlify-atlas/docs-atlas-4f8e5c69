@@ -1,0 +1,67 @@
+---
+title: "Supplier Directory: Manage Vendor Contacts and RIF Records"
+sidebarTitle: "Suppliers"
+description: "Maintain a complete vendor directory with RIF tax IDs, contact details, and addresses—add, edit, or remove supplier records from the Suppliers module."
+---
+
+The Suppliers module is the central directory for every vendor that provides ingredients, packaging, or other supplies to the restaurant. Each record captures both the business-level information needed for procurement (company name, tax ID, address, city) and the day-to-day contact details for the person responsible for the account (name, phone, email). Staff can add new vendors, update contact details as they change, and remove suppliers that are no longer active—all from a single table view.
+
+## Supplier Record Fields
+
+Every proveedor entry in the `Inventario.Proveedores` PostgreSQL table contains the following fields:
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `ID_Proveedor` | `bigint` (PK, auto) | — | Auto-generated unique identifier |
+| `Nombre_Empresa` | `varchar(150)` | ✓ | Legal name of the supplier company |
+| `Identificacion_RIF` | `varchar(30)` | ✓ | Venezuelan business tax ID (RIF); must be unique |
+| `Ciudad` | `varchar(100)` | ✓ | City where the supplier is located |
+| `Telefono_Empresa` | `varchar(30)` | ✓ | Main business phone number |
+| `Email_Empresa` | `varchar(100)` | ✓ | Business email address; must be unique |
+| `Direccion` | `varchar(255)` | ✓ | Full street address |
+| `Nombre_Encargado` | `varchar(100)` | ✓ | Name of the account representative or manager |
+
+<Note>
+  Both `Identificacion_RIF` and `Email_Empresa` carry a **unique constraint** in the database. Attempting to register two suppliers with the same RIF or the same email address will result in a constraint violation error. Always verify that the RIF and email are not already on file before creating a new record.
+</Note>
+
+## RIF Format
+
+The Venezuelan Registro de Información Fiscal (RIF) uses the format **`J-XXXXXXXX-X`**, where:
+
+- The prefix letter identifies the entity type: `J` = juridical (company), `G` = government, `V` = natural person, `E` = foreign.
+- The eight-digit number is the tax registration number.
+- The single-digit suffix is a check digit.
+
+**Example:** `J-12345678-0`
+
+Always enter the RIF exactly as it appears on official documents to avoid duplicate-detection issues caused by formatting differences.
+
+## Managing Suppliers
+
+<Steps>
+  <Step title="Add a new supplier">
+    Click **Agregar Proveedor** in the top-right corner. The modal requires **Nombre**, **RIF**, and **Teléfono** at minimum. Fill in the remaining fields for a complete record and click **Guardar**.
+  </Step>
+  <Step title="Edit supplier details">
+    Click the pencil icon (✏️) on any supplier row to open the edit modal pre-filled with the current values. Update any field and click **Guardar** to save.
+  </Step>
+  <Step title="Remove a supplier">
+    Click the trash icon (🗑️) on the row. A confirmation prompt is shown before the deletion is executed. This action cannot be undone.
+  </Step>
+</Steps>
+
+<Tip>
+  Keep `Nombre_Encargado` up to date. When stock runs low and a rush order is needed, having the correct contact name in the system avoids delays caused by reaching the wrong person at the vendor's office.
+</Tip>
+
+## API Reference
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/api/proveedores` | Return all suppliers ordered by company name |
+| `POST` | `/api/proveedores` | Create a new supplier record |
+| `PUT` | `/api/proveedores/{id}` | Update one or more fields of an existing supplier |
+| `DELETE` | `/api/proveedores/{id}` | Permanently delete a supplier |
+
+The `POST` and `PUT` endpoints accept both the frontend shorthand keys (`nombre`, `rif`, `contacto`, `telefono`, `email`) and the canonical database column names (`Nombre_Empresa`, `Identificacion_RIF`, `Nombre_Encargado`, `Telefono_Empresa`, `Email_Empresa`) interchangeably.

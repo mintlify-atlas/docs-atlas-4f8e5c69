@@ -1,0 +1,145 @@
+---
+title: "Kitchen Display System (KDS): Manage Active Orders"
+sidebarTitle: "Kitchen"
+description: "The Kitchen Display System shows all active orders in real time, lets staff advance order status, and plays audio alerts when new orders arrive."
+---
+
+The **Kitchen Display System (KDS)** is the real-time board that kitchen staff use to manage the flow of active orders. It shows every order currently in `recibido` or `preparando` state as an individual card, displays the elapsed time since the order was placed, and lets any cook advance an order through the preparation pipeline with a single confirmation click. An audio alert (three ascending tones) sounds automatically whenever a new order appears on the board, keeping the kitchen aware of incoming work without anyone needing to watch the screen.
+
+## Accessing the Kitchen View
+
+Select **Cocina** from the staff sidebar, or navigate directly:
+
+```
+http://localhost/?view=kitchen
+```
+
+The view auto-refreshes every **30 seconds**. Staff can also press **Actualizar** in the top-right corner to force an immediate reload.
+
+---
+
+## Kitchen Workflow
+
+<Steps>
+  <Step title="New Order Arrives">
+    When a cashier or a customer submits an order it is persisted with `estado_orden = recibido`. On the next refresh cycle (or when **Actualizar** is pressed) a new card appears on the KDS board. If there were fewer cards before the refresh, the audio notification plays and a toast confirms how many active orders are on the board.
+  </Step>
+
+  <Step title="Start Preparation">
+    Click the **▶ Iniciar preparación** button at the bottom of a `Recibido` card. A confirmation modal appears showing:
+
+    - Order number (`#id_pedido`)
+    - Customer name
+    - Table number (for `mesa` orders)
+
+    Confirm to send `PUT /api/v1/ordenes/{num_ticket}` with `Estatus_Orden: "Preparando"`. The card header immediately changes to the **Preparando** color scheme.
+  </Step>
+
+  <Step title="Monitor Elapsed Time">
+    Each card displays a live elapsed timer in the top-right corner (updated every 30 seconds). If an order has been in the `Preparando` state for **10 minutes or more** the card border turns red and pulses to alert kitchen staff that the order may be running late.
+  </Step>
+
+  <Step title="Dispatch the Order">
+    Click **✓ Despachar** on a `Preparando` card to advance it to `Listo`. The confirmation modal shows the customer name and table number. Confirm to send `PUT /api/v1/ordenes/{num_ticket}` with `Estatus_Orden: "Listo"`.
+
+    A success toast is shown: *"✓ Orden #N lista para entregar — [Customer Name]"*.
+  </Step>
+
+  <Step title="Order Leaves the Board">
+    Once dispatched the card shows a green **"Listo para entregar"** footer instead of an action button. The order is removed from the active board on the next refresh because the API query filters for `recibido` and `preparando` only. The full order history (including `listo`, `entregado`, and `cancelado` orders) is available in the **Orders** module.
+  </Step>
+</Steps>
+
+---
+
+## Order Status Transitions
+
+| From | Action | To | API Call |
+|---|---|---|---|
+| `recibido` | ▶ Iniciar preparación | `preparando` | `PUT /api/v1/ordenes/{id}` `{ "Estatus_Orden": "Preparando" }` |
+| `preparando` | ✓ Despachar | `listo` | `PUT /api/v1/ordenes/{id}` `{ "Estatus_Orden": "Listo" }` |
+| `listo` | — | Card auto-removed from KDS | — |
+
+<Note>
+  The KDS **only** supports advancing orders forward. To cancel an order or view completed/delivered history, use the **Orders** module, which displays the full order list with cancellation controls.
+</Note>
+
+---
+
+## Order Card Reference
+
+Each card on the KDS board displays the following information:
+
+| Element | Source Field | Notes |
+|---|---|---|
+| Order number | `id_pedido` | Displayed in large monospace type |
+| Order type | `tipo` | Mesa + table number, 🛍️ Para Llevar, or 🛵 Delivery |
+| Table number | `mesa` | Shown in large bold type for `mesa` orders |
+| Customer name | `cliente_nombre` | Shown below the order type |
+| Phone | `cliente_telefono` | Shown next to the name in small text |
+| Elapsed time | Derived from `hora_creacion` | Recalculated every 30 s; turns red after 10 min in `preparando` |
+| Items | `items[].nombre`, `items[].cantidad` | Each line shows `Nx Item Name` |
+| Special notes | `items[].notas` | Shown in a red warning badge below the item name |
+
+---
+
+## Visual State Indicators
+
+| State | Card Border | Header Background | Action Button |
+|---|---|---|---|
+| `Recibido` | Default (`outline-variant`) | `surface-container-highest` | Blue **▶ Iniciar preparación** |
+| `Preparando` | Default (`outline-variant`) | `surface-container-highest` | Teal **✓ Despachar** |
+| `Preparando` (≥ 10 min) | 🔴 Red pulsing (`border-error`) | `error-container` | Teal **✓ Despachar** |
+| `Listo` | Green (`border-emerald-400`) | `emerald-50` | ✅ Green "Listo para entregar" (no button) |
+
+---
+
+## Audio Notifications
+
+The KDS uses the **Web Audio API** to play a three-note chord (Do–Mi–Sol, 523 / 659 / 784 Hz) whenever a new order is detected. The sound can be toggled on or off using the **Sonido ON / Silencio** button in the top toolbar.
+
+```
+Sonido ON  →  Audio alert plays on new orders
+Silencio   →  No audio; visual toast still appears
+```
+
+<Tip>
+  If the browser blocks audio on page load (autoplay policy), the sound will not play until the user has interacted with the page at least once. Ask kitchen staff to click the sound toggle button when they first open the KDS to ensure the browser grants audio permission.
+</Tip>
+
+---
+
+## Empty and Error States
+
+| Situation | What the KDS Shows |
+|---|---|
+| No active orders | ✅ "¡Cocina Despejada!" with a refresh button |
+| API unreachable | ⚠️ "Error de Conexión" with the error message and a Reintentar button |
+| Loading on first open | Spinning loader centered on screen |
+
+---
+
+## Backend API Reference
+
+### Fetch Active Orders
+
+```http
+GET /api/v1/ordenes?estatus=activo
+Content-Type: application/json
+```
+
+The backend filters for orders with `estado_orden IN ('recibido', 'preparando')` and returns them sorted by `num_ticket` descending (newest first).
+
+### Advance Order Status
+
+```http
+PUT /api/v1/ordenes/{num_ticket}
+Content-Type: application/json
+
+{
+  "Estatus_Orden": "Preparando",
+  "estado_orden": "preparando"
+}
+```
+
+Both casing variants are sent simultaneously to ensure compatibility with the backend regardless of which field name it reads first. The backend normalizes to lowercase before comparing against the `EstadoOrdenEnum`.

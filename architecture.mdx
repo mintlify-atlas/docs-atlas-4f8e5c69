@@ -1,0 +1,110 @@
+---
+title: "Three-Layer Docker Architecture of Tradiciones y Sabores"
+sidebarTitle: "Architecture"
+description: "Tradiciones y Sabores runs as three Docker containers — Nginx/React frontend, FastAPI backend, and PostgreSQL 16 — orchestrated by Docker Compose."
+---
+
+Tradiciones y Sabores is structured as a classic three-tier application where each layer runs in its own Docker container, communicates over a private network, and is exposed to the outside world only on its designated port. Docker Compose orchestrates all three services — `frontend`, `backend`, and `postgres` — so the entire stack can be launched with a single `docker compose up --build -d` command. Persistent database storage is maintained through a named Docker volume, and the backend automatically migrates and seeds the schema on every startup.
+
+## Architecture Diagram
+
+```
++-----------------------------------------------------------------------+
+|                    CAPA 1: FRONTEND (Puerto 80)                       |
+|               React 19 + TypeScript + Vite + Nginx SPA                |
++-----------------------------------------------------------------------+
+                                   |
+                     Peticiones REST /api/v1/
+                                   v
++-----------------------------------------------------------------------+
+|                    CAPA 2: BACKEND (Puerto 5000)                      |
+|               Python 3.12 + FastAPI + Uvicorn ASGI                    |
++-----------------------------------------------------------------------+
+                                   |
+                     Conexión ORM SQLAlchemy
+                                   v
++-----------------------------------------------------------------------+
+|                 CAPA 3: BASE DE DATOS (Puerto 5432)                   |
+|                      PostgreSQL 16 Alpine                             |
++-----------------------------------------------------------------------+
+```
+
+## Docker Compose Services
+
+The three services are defined in `docker-compose.yml` at the repository root. Each service maps its container port directly to the host.
+
+| Service Name | Container Name | Image / Build | Port Mapping | Role |
+|---|---|---|---|---|
+| `postgres` | `tradiciones_sabores_db` | `postgres:16-alpine` | `5432:5432` | Relational database with persistent volume |
+| `backend` | `tradiciones_sabores_api` | `./backend/Dockerfile` | `5000:5000` | FastAPI REST API + Uvicorn ASGI server |
+| `frontend` | `tradiciones_sabores_frontend` | `./Dockerfile` (multi-stage) | `80:80`, `443:443` | Nginx serving the React SPA + API reverse proxy |
+
+A single named volume, **`postgres_data`**, is mounted at `/var/lib/postgresql/data` inside the `postgres` container to persist all database records across container restarts and re-deployments.
+
+## Layer 1 — Frontend (React 19 + Nginx)
+
+The frontend is built with Vite into a static bundle and served by Nginx 1.27 Alpine. Nginx acts as both the static file server for the React SPA and a transparent reverse proxy: any request whose path begins with `/api/v1/` is forwarded internally to the `backend` service on port 5000. This means the browser only ever communicates with port 80 — the backend port is never directly exposed to end users in production.
+
+The application has two distinct rendering modes determined by the URL query string:
+- **No query parameter** → `SystemApp` — full staff interface with Sidebar, TopBar, and all seven module views.
+- **`?view=menu`** → `CustomerApp` — stripped-down public view showing only `CustomerMenuView` with no staff navigation.
+
+## Layer 2 — Backend (FastAPI + Uvicorn)
+
+The backend is a Python 3.12 application running on Uvicorn ASGI at port 5000. API routes are split into five router modules under `backend/routers/`:
+
+| Router File | Prefix | Responsibility |
+|---|---|---|
+| `ordenes.py` | `/api/v1/ordenes` | Create, update status, and delete orders |
+| `productos.py` | `/api/v1/platos` | Menu catalog and pricing |
+| `inventario.py` | `/api/v1/inventario` | Ingredient stock CRUD |
+| `proveedores.py` | `/api/v1/proveedores` | Supplier directory CRUD |
+| `reportes.py` | `/api/v1/reportes` | KPIs and financial summaries |
+
+CORS is configured globally to allow all origins (`*`), enabling the Nginx-served frontend to call the API regardless of host environment.
+
+## Layer 3 — Database (PostgreSQL 16)
+
+PostgreSQL 16 Alpine stores all application data. The SQLAlchemy ORM (`database.py`) manages the connection pool, and `models.py` defines all table mappings using `Base.metadata`.
+
+### Database Tables
+
+| Table | Schema | Description |
+|---|---|---|
+| `plato` | public | Menu items with name, description, price, and category |
+| `mesa` | public | Dining tables with capacity, status, and location |
+| `cliente` | public | Customer records keyed by Venezuelan cédula ID |
+| `pedido` | public | Orders linking a customer, table, and order type |
+| `detalle_pedido` | public | Line items (composite PK: ticket + dish) with quantity and subtotal |
+| `factura` | public | Invoices with subtotal, 16% IVA tax, total, and payment status |
+| `Insumos` | `Inventario` | Ingredient/supply inventory with stock levels and reorder points |
+| `Proveedores` | `Inventario` | Supplier directory with RIF, contact details, and address |
+
+<Note>
+  The `Insumos` and `Proveedores` tables live in a dedicated PostgreSQL schema named **`Inventario`** (capital I). On startup, `main.py` runs `CREATE SCHEMA IF NOT EXISTS "Inventario"` before calling `Base.metadata.create_all()`, ensuring the schema exists before SQLAlchemy attempts to create the tables within it. This step is PostgreSQL-specific and is skipped automatically for other database dialects.
+</Note>
+
+## Auto-Migration and Seed on Startup
+
+The `lifespan` context manager in `main.py` executes three steps in order every time the backend container starts:
+
+1. **Schema creation** — `CREATE SCHEMA IF NOT EXISTS "Inventario"` is issued directly via SQLAlchemy `engine.connect()`.
+2. **Table migration** — `Base.metadata.create_all(bind=engine, checkfirst=True)` creates any missing tables without dropping existing data.
+3. **Data seeding** — `seed_initial_data()` checks whether each table is empty and, if so, inserts the default catalog: 10 menu items, 5 tables, a general customer, 3 inventory items, and 1 supplier.
+
+<Tip>
+  Because `create_all` uses `checkfirst=True`, re-deploying or restarting the backend container is safe — existing production data is never overwritten. The seed function only inserts records when a table has zero rows.
+</Tip>
+
+## Environment Variables
+
+The `backend` service reads its database connection from environment variables set in `docker-compose.yml`:
+
+| Variable | Default Value | Description |
+|---|---|---|
+| `DB_HOST` | `postgres` | Docker Compose service name of the database container |
+| `DB_PORT` | `5432` | PostgreSQL port |
+| `DB_NAME` | `tradiciones_sabores` | Database name |
+| `DB_USER` | `postgres` | Database user |
+| `DB_PASSWORD` | `postgres` | Database password |
+| `CORS_ORIGINS` | `*` | Allowed CORS origins for the API |

@@ -1,0 +1,166 @@
+---
+title: "Environment Variables for Tradiciones y Sabores"
+sidebarTitle: "Environment Variables"
+description: "Reference for every environment variable that controls the database connection, API server port, and CORS policy across all deployment modes."
+---
+
+Environment variables are the primary mechanism for configuring Tradiciones y Sabores without changing source code. The backend reads them at startup to establish its PostgreSQL connection and enforce the CORS policy that governs which origins may call the API. Three `.env.example` files exist in the repository—one at the project root for Vite frontend build arguments, one at `backend/` for the FastAPI server, and one named `.deploy.env.example` for remote SSH deployment credentials.
+
+## Backend Environment Variables
+
+These variables are read by the FastAPI application at startup. In Docker Compose they are injected directly in the `environment:` block of the `backend` service; for bare-metal or systemd deployments, place them in `backend/.env`.
+
+<ParamField body="DB_HOST" type="string" required>
+  Hostname or IP address of the PostgreSQL server. Use `postgres` when running inside Docker Compose (resolves to the `tradiciones_sabores_db` container). Use `localhost` for a local bare-metal setup.
+
+  **Default (Docker):** `postgres`
+  **Default (local):** `localhost`
+</ParamField>
+
+<ParamField body="DB_PORT" type="integer" required>
+  Port on which PostgreSQL is listening.
+
+  **Default:** `5432`
+</ParamField>
+
+<ParamField body="DB_NAME" type="string" required>
+  Name of the PostgreSQL database. The backend creates this database schema automatically on first boot if the tables do not yet exist.
+
+  **Default:** `tradiciones_sabores`
+</ParamField>
+
+<ParamField body="DB_USER" type="string" required>
+  PostgreSQL role used to authenticate. In Docker Compose this matches the `POSTGRES_USER` value set on the `postgres` service.
+
+  **Default (Docker):** `postgres`
+  **Default (local):** `tradiciones_user`
+</ParamField>
+
+<ParamField body="DB_PASSWORD" type="string" required>
+  Password for the `DB_USER` PostgreSQL role. Always override the default value in any non-development environment.
+
+  **Default (Docker Compose example):** `postgres`
+</ParamField>
+
+<ParamField body="API_PORT" type="integer">
+  Port on which Uvicorn binds the FastAPI application. The backend `Dockerfile` hard-codes `--port 5000`, so changing this variable alone is not sufficient—update the `CMD` in `backend/Dockerfile` as well.
+
+  **Default:** `5000`
+</ParamField>
+
+<ParamField body="CORS_ORIGINS" type="string" required>
+  Comma-separated list of allowed origins for CORS requests. Accepts `*` to permit all origins (suitable for local development only). In production, list only the specific domains that should be allowed to call the API.
+
+  **Default (Docker Compose):** `*`
+  **Production example:** `http://158.220.100.226,http://localhost:5173,http://localhost:3000`
+</ParamField>
+
+### backend/.env.example
+
+```ini
+# ══════════════════════════════════════════════════════════════
+#  Tradiciones y Sabores — Backend Configuration
+#  Copia este archivo como .env y rellena los valores reales
+# ══════════════════════════════════════════════════════════════
+
+# ── Base de Datos (PostgreSQL) ─────────────────────────────
+# Proveídos por el equipo de BD
+DB_HOST=localhost
+DB_PORT=5432
+DB_NAME=tradiciones_sabores
+DB_USER=tradiciones_user
+DB_PASSWORD=CAMBIA_ESTA_CONTRASENA
+
+# ── Servidor API ───────────────────────────────────────────
+API_PORT=5000
+
+# ── CORS ──────────────────────────────────────────────────
+# Lista separada por comas de orígenes permitidos
+CORS_ORIGINS=http://158.220.100.226,http://localhost:5173,http://localhost:3000
+```
+
+## Frontend Build Variables
+
+These are Vite build-time arguments baked into the React bundle at compile time. They are **not** runtime secrets—their values become part of the static JavaScript bundle. Set them before running `npm run build` or pass them as Docker `--build-arg` flags.
+
+<ParamField body="VITE_API_URL" type="string">
+  Base URL of the backend API. When deploying with Docker Compose and Nginx's reverse proxy, the frontend calls relative `/api/v1/` paths, so this variable is typically left empty. Set it only when the frontend is built to contact an external backend directly.
+
+  **Default:** `http://localhost:3000`
+</ParamField>
+
+<ParamField body="VITE_API_KEY" type="string">
+  API key for authenticating with the backend. Refer to the backend `.env` for the matching `API_KEY` value.
+
+  **Default:** *(empty)*
+</ParamField>
+
+<ParamField body="VITE_WHATSAPP_NUMERO" type="string">
+  WhatsApp number for the restaurant, without symbols and including country code. Used by the customer menu view to generate click-to-chat links.
+
+  **Example (Venezuela +58):** `584140000000`
+</ParamField>
+
+### .env.example (project root)
+
+```ini
+# URL base del backend de los compañeros (Node.js/Express)
+# En desarrollo local: http://localhost:3000
+# En producción: la URL del servidor de los compañeros
+VITE_API_URL=http://localhost:3000
+
+# API Key del backend (ver variable API_KEY en el .env del backend de los compañeros)
+VITE_API_KEY=tu_api_key_aqui
+
+# Número de WhatsApp del restaurante (sin signos, con código de país)
+# Ejemplo Venezuela (+58): 58414XXXXXXX
+VITE_WHATSAPP_NUMERO=584140000000
+```
+
+## SSH Deployment Variables
+
+The `.deploy.env.example` file contains credentials used by deployment scripts to push updates to a remote VPS over SSH. These variables are **never** read by the application itself.
+
+<ParamField body="SERVER_IP" type="string">
+  Public IP address of the target VPS.
+
+  **Example:** `158.220.100.226`
+</ParamField>
+
+<ParamField body="SSH_USER" type="string">
+  SSH username on the remote server.
+
+  **Default:** `root`
+</ParamField>
+
+<ParamField body="SSH_PASSWORD" type="string">
+  SSH password for the remote user. Prefer key-based authentication and leave this empty in production.
+</ParamField>
+
+<ParamField body="SERVER_PATH" type="string">
+  Absolute path on the remote server where the project is deployed.
+
+  **Default:** `/var/www/tradicionesysabores`
+</ParamField>
+
+### .deploy.env.example
+
+```ini
+# ── Credenciales del servidor ─────────────────────────
+# Copia este archivo como ".deploy.env" en la raíz del proyecto
+# y rellena tus datos reales.
+SERVER_IP=158.220.100.226
+SSH_USER=root
+SSH_PASSWORD=CAMBIA_ESTO
+SERVER_PATH=/var/www/tradicionesysabores
+```
+
+## CORS in Production
+
+<Note>
+  When deploying to a public server, change `CORS_ORIGINS` from `*` to a comma-separated list of your actual frontend domains—for example `https://yourdomain.com,https://www.yourdomain.com`. Allowing all origins in production exposes your API to cross-origin requests from any website.
+</Note>
+
+<Warning>
+  Never commit any `.env`, `.deploy.env`, or any file containing real passwords and API keys to version control. All `.env*` files (except `.*.example` templates) should be listed in `.gitignore`. If credentials are accidentally committed, rotate them immediately and purge the commit from history.
+</Warning>

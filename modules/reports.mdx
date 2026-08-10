@@ -1,0 +1,82 @@
+---
+title: "Reports and KPI Dashboard: Financial Analytics"
+sidebarTitle: "Reports"
+description: "Monitor revenue, order volume, and preparation times with rolling 30-day KPIs, period filters, and paginated order tables exportable to CSV."
+---
+
+The Reports module transforms raw order and invoice data into actionable business intelligence. Three KPI cards at the top of the page surface the metrics that matter most—total orders, gross revenue, and average kitchen preparation time—all calculated over a rolling 30-day window and compared against the preceding 30-day period so managers can see at a glance whether the business is trending up or down. Below the KPIs, a paginated order table lets staff drill into individual records filtered by time period and order status, with a one-click CSV export for external analysis.
+
+## KPI Summary Cards
+
+The KPI data is fetched from `GET /api/reportes/resumen` each time the page loads. All metrics cover the **current 30-day rolling window** (today minus 30 days through now).
+
+| Metric | Field | Description |
+|---|---|---|
+| Total Orders | `total_pedidos` | Count of all orders with a `fecha_creacion` in the last 30 days |
+| Gross Revenue | `ingresos_brutos` | Sum of `factura.total` for orders in the last 30 days |
+| Avg. Prep Time | `tiempo_promedio_seg` | Average seconds from order creation to completion for `listo` and `entregado` orders |
+| Orders Change | `pct_cambio_pedidos` | Percentage change in order count vs the prior 30-day period |
+| Revenue Change | `pct_cambio_ingresos` | Percentage change in gross revenue vs the prior 30-day period |
+
+Percentage-change values are displayed with a trending-up (green) or trending-down (red) arrow indicator. Positive values mean the current period outperformed the prior one.
+
+<Note>
+  All KPI comparisons use a **rolling 30-day window**, not calendar months. The "current" period spans from 30 days ago to now; the "prior" period spans from 60 days ago to 30 days ago. A business open for fewer than 30 days will see the prior-period baseline as zero, which causes percentage changes to display as `+100%` even on modest current-period numbers.
+</Note>
+
+## Revenue Calculation
+
+Revenue figures are read directly from the `factura` table. Each order generates exactly one invoice record at creation time with the following breakdown:
+
+- **`subtotal`** — sum of all `detalle_pedido.subtotal` line items
+- **`impuesto`** — 16% IVA applied to the subtotal (`subtotal × 0.16`)
+- **`total`** — `subtotal + impuesto` (the value summed into `ingresos_brutos`)
+
+This means the gross revenue figure shown in Reports includes tax. To derive pre-tax revenue, divide `ingresos_brutos` by `1.16`.
+
+## Average Preparation Time
+
+`tiempo_promedio_seg` is computed server-side by finding all orders in the current 30-day window whose `estado_orden` is `listo` or `entregado`, then averaging `(now − fecha_creacion)` in seconds across those orders. The frontend formats this as `Xm YYs` for readability (e.g., `12m 34s`).
+
+## Period and Status Filters
+
+The order table below the KPI cards can be narrowed with two independent filters:
+
+| Filter | Options | Default |
+|---|---|---|
+| Period | `hoy` (today), `semana` (last 7 days), `mes` (last 30 days) | `hoy` |
+| Status | `Todos`, `Recibido`, `Preparando`, `Listo`, `Entregado` | `Todos` |
+
+Both filters trigger a fresh API call to `GET /api/reportes/pedidos` with the corresponding `periodo` and `estado` query parameters, so the KPI cards and the order table always reflect consistent data for the selected time range.
+
+## Browsing and Exporting the Order Table
+
+<Steps>
+  <Step title="Select a time period">
+    Use the **Hoy / 7 días / 30 días** toggle in the top toolbar to define the date range for the order table.
+  </Step>
+  <Step title="Filter by status (optional)">
+    Use the status dropdown inside the table toolbar to narrow results to a specific order state.
+  </Step>
+  <Step title="Page through results">
+    The table displays 10 orders per page. Use the numbered pagination controls at the bottom of the table to navigate. The footer shows the current slice (e.g., "Showing 1–10 of 47").
+  </Step>
+  <Step title="Export to CSV">
+    Click **Exportar CSV** to download the currently filtered order list as a `.csv` file named `pedidos_YYYY-MM-DD.csv`. The export includes: ID Pedido, Hora, Cliente, Cédula, Teléfono, Tipo, Total, and Estado.
+  </Step>
+</Steps>
+
+<Tip>
+  For end-of-month accounting, set the period to **30 días** and leave the status filter on **Todos**, then export to CSV. The file will contain all orders for the rolling month—including total and status—ready to import into a spreadsheet for reconciliation.
+</Tip>
+
+## API Reference
+
+| Method | Endpoint | Query params | Description |
+|---|---|---|---|
+| `GET` | `/api/reportes/resumen` | — | Return the five KPI metrics for the rolling 30-day window |
+| `GET` | `/api/reportes/pedidos` | `periodo`, `estado` | Return orders filtered by time period and optional status |
+
+**`periodo` values:** `hoy`, `semana`, `mes` (defaults to last 30 days if omitted)
+
+**`estado` values:** `recibido`, `preparando`, `listo`, `entregado` (omit or pass `Todos` for no status filter)

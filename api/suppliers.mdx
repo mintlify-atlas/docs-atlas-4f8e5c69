@@ -1,0 +1,238 @@
+---
+title: "Suppliers API: Manage Vendor Directory and Contacts"
+sidebarTitle: "Suppliers"
+description: "Create, read, update, and delete supplier records in the Tradiciones y Sabores vendor directory, including RIF identifiers and contact details."
+---
+
+The Suppliers API manages the `Inventario.Proveedores` table, giving you full CRUD control over every vendor your kitchen depends on. Each supplier record holds the company name, Venezuelan RIF tax identifier, primary contact, phone, email, city, and address. All four endpoints live under the `/api/proveedores` prefix and return responses using a dual-key shape so both lowercase shorthand and PascalCase field names work side-by-side.
+
+<Note>
+  Every supplier response object includes **two keys for each field** — a lowercase shorthand (e.g. `nombre`, `rif`, `contacto`) and the canonical PascalCase column name (e.g. `Nombre_Empresa`, `Identificacion_RIF`, `Nombre_Encargado`). Both keys always carry the same value. This dual-key design preserves backward compatibility with earlier frontend integrations that relied on either naming convention.
+</Note>
+
+<Note>
+  Venezuelan businesses are identified by a **RIF** (*Registro de Información Fiscal*). The standard format is a letter prefix followed by 8 digits and a verification digit, separated by hyphens: `J-XXXXXXXX-X`. The prefix denotes entity type — `J` for juridical (company), `V` for Venezuelan individual, `E` for foreign individual, `G` for government. Always store the RIF in this hyphenated format to avoid duplicate-constraint errors on the `Identificación_RIF` column.
+</Note>
+
+---
+
+## GET /api/proveedores
+
+Returns the full list of suppliers in the vendor directory, ordered alphabetically by company name (`Nombre_Empresa`).
+
+```bash
+curl -X GET https://your-api-host/api/proveedores \
+  -H "Accept: application/json"
+```
+
+### Response
+
+Returns a JSON array of supplier objects. Each element contains the following fields:
+
+<ResponseField name="id_proveedor" type="integer">
+  Numeric primary key of the supplier (shorthand alias for `ID_Proveedor`).
+</ResponseField>
+
+<ResponseField name="ID_Proveedor" type="integer">
+  Canonical primary key of the supplier record in `Inventario.Proveedores`.
+</ResponseField>
+
+<ResponseField name="nombre" type="string">
+  Company name (shorthand alias for `Nombre_Empresa`).
+</ResponseField>
+
+<ResponseField name="Nombre_Empresa" type="string">
+  Full legal company name, up to 150 characters.
+</ResponseField>
+
+<ResponseField name="rif" type="string">
+  Venezuelan tax identifier (shorthand alias for `Identificacion_RIF`).
+</ResponseField>
+
+<ResponseField name="Identificacion_RIF" type="string">
+  Venezuelan RIF in `J-XXXXXXXX-X` format. Unique across all supplier records.
+</ResponseField>
+
+<ResponseField name="contacto" type="string">
+  Name of the primary contact person (shorthand alias for `Nombre_Encargado`).
+</ResponseField>
+
+<ResponseField name="Nombre_Encargado" type="string">
+  Full name of the account manager or main contact at the supplier.
+</ResponseField>
+
+<ResponseField name="telefono" type="string">
+  Company phone number (shorthand alias for `Telefono_Empresa`).
+</ResponseField>
+
+<ResponseField name="Telefono_Empresa" type="string">
+  Primary business phone number of the supplier, up to 30 characters.
+</ResponseField>
+
+<ResponseField name="email" type="string">
+  Business email address (shorthand alias for `Email_Empresa`).
+</ResponseField>
+
+<ResponseField name="Email_Empresa" type="string">
+  Primary business email of the supplier. Unique across all supplier records.
+</ResponseField>
+
+<ResponseField name="Ciudad" type="string">
+  City where the supplier is located.
+</ResponseField>
+
+<ResponseField name="Direccion" type="string">
+  Full street address of the supplier, up to 255 characters.
+</ResponseField>
+
+**Example response**
+
+```json
+[
+  {
+    "id_proveedor": 1,
+    "ID_Proveedor": 1,
+    "nombre": "Distribuidora Los Andes C.A.",
+    "Nombre_Empresa": "Distribuidora Los Andes C.A.",
+    "rif": "J-30512847-3",
+    "Identificacion_RIF": "J-30512847-3",
+    "contacto": "Carlos Medina",
+    "Nombre_Encargado": "Carlos Medina",
+    "telefono": "0212-5550198",
+    "Telefono_Empresa": "0212-5550198",
+    "email": "ventas@losandes.com.ve",
+    "Email_Empresa": "ventas@losandes.com.ve",
+    "Ciudad": "Caracas",
+    "Direccion": "Av. Principal de Los Ruices, Galpón 4, Caracas"
+  }
+]
+```
+
+---
+
+## POST /api/proveedores
+
+Creates a new supplier record. The endpoint accepts both lowercase shorthand keys and PascalCase column names in the request body — if both variants are sent for the same field, the shorthand key takes precedence.
+
+`Identificacion_RIF` and `Email_Empresa` are subject to unique constraints; attempting to create a duplicate will return a database integrity error.
+
+**Status on success:** `201 Created`
+
+```bash
+curl -X POST https://your-api-host/api/proveedores \
+  -H "Content-Type: application/json" \
+  -d '{
+    "nombre": "Frigorífico Central S.A.",
+    "rif": "J-29874561-0",
+    "contacto": "Luisa Torrealba",
+    "telefono": "0414-6230987",
+    "email": "pedidos@frigorifico-central.com.ve",
+    "Ciudad": "Maracay",
+    "Direccion": "Zona Industrial Las Tejerías, Nave 12, Maracay"
+  }'
+```
+
+### Request body
+
+<ParamField body="nombre" type="string">
+  Company name. Accepts `nombre` or `Nombre_Empresa`. Defaults to `"Proveedor Desconocido"` if omitted.
+</ParamField>
+
+<ParamField body="rif" type="string">
+  Venezuelan RIF identifier. Accepts `rif` or `Identificacion_RIF`. Must be unique. Defaults to `"J-00000000-0"` if omitted.
+</ParamField>
+
+<ParamField body="contacto" type="string">
+  Name of the primary contact. Accepts `contacto` or `Nombre_Encargado`. Defaults to `"Encargado General"` if omitted.
+</ParamField>
+
+<ParamField body="telefono" type="string">
+  Business phone number. Accepts `telefono` or `Telefono_Empresa`. Defaults to `"0000000000"` if omitted.
+</ParamField>
+
+<ParamField body="email" type="string">
+  Business email address. Accepts `email` or `Email_Empresa`. Must be unique. Defaults to a generated placeholder if omitted.
+</ParamField>
+
+<ParamField body="Ciudad" type="string">
+  City of the supplier. Defaults to `"Caracas"` if omitted.
+</ParamField>
+
+<ParamField body="Direccion" type="string">
+  Full street address. Defaults to `"Dirección Principal"` if omitted.
+</ParamField>
+
+### Response
+
+Returns the newly created supplier object in the same dual-key format described under [GET /api/proveedores](#get-apiproveedores).
+
+---
+
+## PUT /api/proveedores/{id_proveedor}
+
+Updates one or more fields on an existing supplier. Only the keys present in the request body are modified; omitted fields retain their current values. The same dual-key aliases (`nombre` / `Nombre_Empresa`, etc.) are accepted.
+
+Returns `404 Not Found` with `{"detail": "Proveedor no encontrado"}` if no supplier exists for the given `id_proveedor`.
+
+```bash
+curl -X PUT https://your-api-host/api/proveedores/1 \
+  -H "Content-Type: application/json" \
+  -d '{
+    "telefono": "0212-5559876",
+    "email": "nuevoemail@losandes.com.ve"
+  }'
+```
+
+### Path parameter
+
+<ParamField path="id_proveedor" type="integer" required>
+  The numeric primary key (`ID_Proveedor`) of the supplier to update.
+</ParamField>
+
+### Request body
+
+All fields are optional. Provide only the fields you want to change.
+
+<ParamField body="nombre" type="string">
+  New company name. Also accepted as `Nombre_Empresa`.
+</ParamField>
+
+<ParamField body="rif" type="string">
+  New RIF identifier. Also accepted as `Identificacion_RIF`. Must remain unique.
+</ParamField>
+
+<ParamField body="contacto" type="string">
+  New contact name. Also accepted as `Nombre_Encargado`.
+</ParamField>
+
+<ParamField body="telefono" type="string">
+  New phone number. Also accepted as `Telefono_Empresa`.
+</ParamField>
+
+<ParamField body="email" type="string">
+  New email address. Also accepted as `Email_Empresa`. Must remain unique.
+</ParamField>
+
+### Response
+
+Returns the full updated supplier object in dual-key format.
+
+---
+
+## DELETE /api/proveedores/{id_proveedor}
+
+Permanently deletes the supplier record identified by `id_proveedor`. This action is irreversible.
+
+Returns `404 Not Found` with `{"detail": "Proveedor no encontrado"}` if no supplier exists for the given ID.
+
+**Status on success:** `204 No Content` (empty response body)
+
+```bash
+curl -X DELETE https://your-api-host/api/proveedores/1
+```
+
+### Path parameter
+
+<ParamField path="id_proveedor" type="integer" required>
+  The numeric primary key (`ID_Proveedor`) of the supplier to delete.
+</ParamField>
