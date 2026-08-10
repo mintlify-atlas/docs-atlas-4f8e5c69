@@ -43,10 +43,10 @@ A single named volume, **`postgres_data`**, is mounted at `/var/lib/postgresql/d
 
 ## Layer 1 — Frontend (React 19 + Nginx)
 
-The frontend is built with Vite into a static bundle and served by Nginx 1.27 Alpine. Nginx acts as both the static file server for the React SPA and a transparent reverse proxy: any request whose path begins with `/api/v1/` is forwarded internally to the `backend` service on port 5000. This means the browser only ever communicates with port 80 — the backend port is never directly exposed to end users in production.
+The frontend is built with Vite into a static bundle and served by Nginx 1.27 Alpine. Nginx acts as both the static file server for the React SPA and a transparent reverse proxy: the browser (and the React API client) sends all requests to paths beginning with `/api/v1/`; Nginx strips the `/v1/` segment and forwards the rewritten path — now beginning with `/api/` — to the `backend` service on port 5000. The FastAPI routers register their routes under `/api/` (e.g. `/api/ordenes`, `/api/platos`), so the strip is required for the paths to match. This means the browser only ever communicates with port 80 — the backend port is never directly exposed to end users in production.
 
-The application has two distinct rendering modes determined by the URL query string:
-- **No query parameter** → `SystemApp` — full staff interface with Sidebar, TopBar, and all seven module views.
+The application has two distinct rendering modes determined by the URL query string. The `isCustomerWindow()` function checks whether `params.get('view') === 'menu'` (exact string match):
+- **No query parameter (or any `?view=` value not in `SYSTEM_VIEWS`)** → `SystemApp` — full staff interface with Sidebar, TopBar, and all seven module views. If a `?view=` value is provided but is not one of `['pos', 'orders', 'kitchen', 'inventory', 'suppliers', 'reports']`, `getInitialView()` defaults to `'pos'`.
 - **`?view=menu`** → `CustomerApp` — stripped-down public view showing only `CustomerMenuView` with no staff navigation.
 
 ## Layer 2 — Backend (FastAPI + Uvicorn)
@@ -55,13 +55,17 @@ The backend is a Python 3.12 application running on Uvicorn ASGI at port 5000. A
 
 | Router File | Prefix | Responsibility |
 |---|---|---|
-| `ordenes.py` | `/api/v1/ordenes` | Create, update status, and delete orders |
-| `productos.py` | `/api/v1/platos` | Menu catalog and pricing |
-| `inventario.py` | `/api/v1/inventario` | Ingredient stock CRUD |
-| `proveedores.py` | `/api/v1/proveedores` | Supplier directory CRUD |
-| `reportes.py` | `/api/v1/reportes` | KPIs and financial summaries |
+| `ordenes.py` | `/api/ordenes` | Create, update status, and delete orders |
+| `productos.py` | `/api/platos` | Menu catalog and pricing |
+| `inventario.py` | `/api/inventario` | Ingredient stock CRUD |
+| `proveedores.py` | `/api/proveedores` | Supplier directory CRUD |
+| `reportes.py` | `/api/reportes` | KPIs and financial summaries |
 
 CORS is configured globally to allow all origins (`*`), enabling the Nginx-served frontend to call the API regardless of host environment.
+
+<Note>
+  `main.py` reads the `CORS_ORIGINS` environment variable and parses it into an `origins` list, but the `CORSMiddleware` is registered with the hardcoded value `allow_origins=["*"]` — the parsed `origins` list is never passed to the middleware. As a result, the `CORS_ORIGINS` environment variable has no effect on runtime CORS behaviour; all origins are always permitted.
+</Note>
 
 ## Layer 3 — Database (PostgreSQL 16)
 
@@ -107,4 +111,4 @@ The `backend` service reads its database connection from environment variables s
 | `DB_NAME` | `tradiciones_sabores` | Database name |
 | `DB_USER` | `postgres` | Database user |
 | `DB_PASSWORD` | `postgres` | Database password |
-| `CORS_ORIGINS` | `*` | Allowed CORS origins for the API |
+| `CORS_ORIGINS` | `http://localhost:5173,http://158.220.100.226,http://localhost:3000` | Parsed but **not used** by the middleware — `allow_origins=["*"]` is hardcoded |

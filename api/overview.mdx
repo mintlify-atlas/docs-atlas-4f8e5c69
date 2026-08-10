@@ -47,6 +47,22 @@ Two lightweight endpoints confirm that the service and database connection are a
   Use `GET /api/debug` during initial deployment to verify that all four database environment variables (`DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`) are correctly resolved and that the ORM can reach PostgreSQL.
 </Tip>
 
+## Frontend Proxy Layer
+
+The React frontend makes all API requests using **relative `/api/v1/` paths** (e.g. `/api/v1/ordenes`). In production, Nginx intercepts these requests and rewrites the path before forwarding them to the FastAPI backend on port 5000:
+
+```
+Browser → /api/v1/ordenes
+       ↓  Nginx rewrite
+Backend → /api/ordenes  (port 5000)
+```
+
+When calling the API directly — for example with `curl`, Postman, or any backend-to-backend integration — **always use the `/api/` paths on port 5000** as documented in the reference tables below. The `/api/v1/` prefix only exists in the Nginx proxy configuration and is never seen by FastAPI.
+
+<Note>
+  If you observe a `404 Not Found` from FastAPI when testing endpoints directly, check that you are using `/api/ordenes` (not `/api/v1/ordenes`). The backend has no `/v1` prefix — that segment is stripped by Nginx before the request arrives.
+</Note>
+
 ## Endpoint Reference
 
 The table below lists every resource route registered in the application. Alias paths (`/api/pedidos`, `/api/productos`) behave identically to their primary counterparts and are noted separately.

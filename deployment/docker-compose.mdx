@@ -1,5 +1,5 @@
 ---
-title: "Deploy Tradiciones y Sabores with Docker Compose"
+title: "Deploying Tradiciones y Sabores with Docker Compose"
 sidebarTitle: "Docker Compose"
 description: "Spin up the full three-service stack—PostgreSQL, FastAPI backend, and React/Nginx frontend—with a single Docker Compose command."
 ---
@@ -162,5 +162,5 @@ docker stats
 </Note>
 
 <Tip>
-  On first startup, the FastAPI backend automatically runs `Base.metadata.create_all()` to create all seven database tables (`plato`, `mesa`, `cliente`, `insumo`, `proveedor`, `pedido`, `item_pedido`) and seeds the initial product catalogue with sample dishes. No manual migration step is required.
+  On first startup, the FastAPI backend automatically runs `Base.metadata.create_all()` to create all database tables (`plato`, `mesa`, `cliente`, `pedido`, `detalle_pedido`, `factura`) plus the `Inventario` schema tables (`Insumos`, `Proveedores`) and seeds the initial product catalogue with sample dishes. No manual migration step is required.
 </Tip>

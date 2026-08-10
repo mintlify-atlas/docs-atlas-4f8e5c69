@@ -1,5 +1,5 @@
 ---
-title: "Environment Variables for Tradiciones y Sabores"
+title: "Environment Variables — Tradiciones y Sabores Config"
 sidebarTitle: "Environment Variables"
 description: "Reference for every environment variable that controls the database connection, API server port, and CORS policy across all deployment modes."
 ---
@@ -90,7 +90,7 @@ These are Vite build-time arguments baked into the React bundle at compile time.
 </ParamField>
 
 <ParamField body="VITE_API_KEY" type="string">
-  API key for authenticating with the backend. Refer to the backend `.env` for the matching `API_KEY` value.
+  An optional API key string that the frontend attaches as an `x-api-key` header on protected requests (platos, inventario, proveedores, reportes). The FastAPI backend does **not** currently validate this header — there is no authentication middleware in the backend — so the value has no effect on server-side access control. Include it for forward compatibility with future backend authentication, or leave it empty.
 
   **Default:** *(empty)*
 </ParamField>
@@ -109,8 +109,10 @@ These are Vite build-time arguments baked into the React bundle at compile time.
 # En producción: la URL del servidor de los compañeros
 VITE_API_URL=http://localhost:3000
 
-# API Key del backend (ver variable API_KEY en el .env del backend de los compañeros)
-VITE_API_KEY=tu_api_key_aqui
+# API Key enviada como header x-api-key en peticiones protegidas del frontend.
+# El backend FastAPI NO valida este header actualmente (sin middleware de autenticación).
+# Déjalo vacío o establece cualquier valor; no afecta el acceso al servidor.
+VITE_API_KEY=
 
 # Número de WhatsApp del restaurante (sin signos, con código de país)
 # Ejemplo Venezuela (+58): 58414XXXXXXX

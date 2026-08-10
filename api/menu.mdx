@@ -54,15 +54,15 @@ Returns an array of dish objects. Each object contains:
 
 ```bash
 # All dishes
-curl -X GET http://localhost:8000/api/platos \
+curl -X GET http://localhost:5000/api/platos \
   -H "Accept: application/json"
 
 # Only main courses
-curl -X GET "http://localhost:8000/api/platos?categoria=plato_principal" \
+curl -X GET "http://localhost:5000/api/platos?categoria=plato_principal" \
   -H "Accept: application/json"
 
 # Only drinks, using the /api/productos alias
-curl -X GET "http://localhost:8000/api/productos?categoria=bebida" \
+curl -X GET "http://localhost:5000/api/productos?categoria=bebida" \
   -H "Accept: application/json"
 ```
 
@@ -121,7 +121,7 @@ Returns the newly created dish as a `PlatoOut` object:
 </Note>
 
 ```bash
-curl -X POST http://localhost:8000/api/platos \
+curl -X POST http://localhost:5000/api/platos \
   -H "Content-Type: application/json" \
   -d '{
     "nombre": "Cachapas con Queso de Mano",

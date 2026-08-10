@@ -87,16 +87,16 @@ Each card on the KDS board displays the following information:
 
 | State | Card Border | Header Background | Action Button |
 |---|---|---|---|
-| `Recibido` | Default (`outline-variant`) | `surface-container-highest` | Blue **▶ Iniciar preparación** |
-| `Preparando` | Default (`outline-variant`) | `surface-container-highest` | Teal **✓ Despachar** |
-| `Preparando` (≥ 10 min) | 🔴 Red pulsing (`border-error`) | `error-container` | Teal **✓ Despachar** |
-| `Listo` | Green (`border-emerald-400`) | `emerald-50` | ✅ Green "Listo para entregar" (no button) |
+| `Recibido` | `border-outline-variant` | `bg-surface-container-highest` | `bg-primary` **▶ Iniciar preparación** |
+| `Preparando` | `border-outline-variant` | `bg-surface-container-highest` | `bg-secondary-container` **✓ Despachar** |
+| `Preparando` (≥ 10 min) | 🔴 Pulsing `border-error` | `bg-error-container` | `bg-secondary-container` **✓ Despachar** |
+| `Listo` | `border-emerald-400` | `bg-emerald-50` | ✅ "Listo para entregar" footer (no button) |
 
 ---
 
 ## Audio Notifications
 
-The KDS uses the **Web Audio API** to play a three-note chord (Do–Mi–Sol, 523 / 659 / 784 Hz) whenever a new order is detected. The sound can be toggled on or off using the **Sonido ON / Silencio** button in the top toolbar.
+The KDS uses the **Web Audio API** to play three sequential ascending tones (Do–Mi–Sol, 523 / 659 / 784 Hz, each 120 ms apart) whenever the active order count increases after the first page load. The alert does **not** play on the initial load — only on subsequent refreshes where the count grows. The sound can be toggled on or off using the **Sonido ON / Silencio** button in the top toolbar.
 
 ```
 Sonido ON  →  Audio alert plays on new orders

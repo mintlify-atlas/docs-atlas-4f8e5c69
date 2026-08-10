@@ -135,6 +135,10 @@ x-api-key: <VITE_API_KEY>
 
 Returns an array of `Producto` objects. Items that do not have a `disponible` flag are treated as available by default.
 
+<Note>
+  The `x-api-key` header is sent by the frontend using the `VITE_API_KEY` environment variable, but the backend does **not** validate it — no authentication middleware is enforced server-side. The header is included for forward-compatibility and does not restrict access to this endpoint.
+</Note>
+
 ### Create an Order
 
 ```http

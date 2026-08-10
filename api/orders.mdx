@@ -117,11 +117,11 @@ Returns an array of order objects. Each object contains:
 
 ```bash
 # All orders
-curl -X GET http://localhost:8000/api/ordenes \
+curl -X GET http://localhost:5000/api/ordenes \
   -H "Accept: application/json"
 
 # Only active orders (recibido or preparando)
-curl -X GET "http://localhost:8000/api/ordenes?estatus=activo" \
+curl -X GET "http://localhost:5000/api/ordenes?estatus=activo" \
   -H "Accept: application/json"
 ```
 
@@ -146,7 +146,7 @@ Returns a single order object with all the fields described in [GET /api/ordenes
 Returns `404` with `{"detail": "Orden / Pedido no encontrado"}` if no order with that ticket number exists.
 
 ```bash
-curl -X GET http://localhost:8000/api/ordenes/42 \
+curl -X GET http://localhost:5000/api/ordenes/42 \
   -H "Accept: application/json"
 ```
 
@@ -204,13 +204,13 @@ Creates a new order. The server resolves or auto-creates the customer by `cedula
 
 Returns the full order object (same shape as GET) with the newly assigned `num_ticket` and invoice totals pre-calculated.
 
-<Tip>
-  The invoice (`Factura`) is created automatically with `estado_pago = pendiente`. Use the Billing API to update payment status once the customer settles the bill.
-</Tip>
+<Note>
+  The invoice (`Factura`) is created automatically with `estado_pago = pendiente`. There is no dedicated billing endpoint in the REST API — to update payment status (e.g. to `pagado` or `anulado`), update the `factura.estado_pago` field directly in the database.
+</Note>
 
 ```bash
 # Mesa order
-curl -X POST http://localhost:8000/api/ordenes \
+curl -X POST http://localhost:5000/api/ordenes \
   -H "Content-Type: application/json" \
   -d '{
     "cedula_cliente": "V-12345678",
@@ -225,7 +225,7 @@ curl -X POST http://localhost:8000/api/ordenes \
   }'
 
 # Delivery order
-curl -X POST http://localhost:8000/api/ordenes \
+curl -X POST http://localhost:5000/api/ordenes \
   -H "Content-Type: application/json" \
   -d '{
     "cedula_cliente": "E-87654321",
@@ -279,7 +279,7 @@ Updates the `estado_orden` of an existing order. This is the primary endpoint us
 Returns `404` if the order does not exist.
 
 ```bash
-curl -X PUT http://localhost:8000/api/ordenes/42 \
+curl -X PUT http://localhost:5000/api/ordenes/42 \
   -H "Content-Type: application/json" \
   -d '{"estado_orden": "preparando"}'
 ```
@@ -315,6 +315,6 @@ Permanently removes an order and all of its associated records. The deletion is 
 Returns `404` with `{"detail": "Orden / Pedido no encontrado"}` if no order with that ticket number exists.
 
 ```bash
-curl -X DELETE http://localhost:8000/api/ordenes/42 \
+curl -X DELETE http://localhost:5000/api/ordenes/42 \
   -H "Accept: application/json"
 ```

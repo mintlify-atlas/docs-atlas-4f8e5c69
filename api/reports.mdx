@@ -88,42 +88,97 @@ curl -X GET "https://your-api-host/api/reportes/pedidos?periodo=semana&estado=pr
 
 ### Response
 
-Returns a JSON array of order objects. Each object matches the `PedidoOut` schema and includes the following fields:
+Returns a JSON array of order objects. Each element has the same flattened shape produced by `format_pedido_response()` — the same format returned by `GET /api/ordenes`. Customer and line-item data are inlined directly into the order object rather than nested under separate `cliente` or `detalles` keys.
+
+<ResponseField name="id_pedido" type="integer">
+  Ticket number, mirrored from `num_ticket` for compatibility with older clients.
+</ResponseField>
 
 <ResponseField name="num_ticket" type="integer">
   Auto-incremented primary key and ticket number for the order.
 </ResponseField>
 
-<ResponseField name="tipo_pedido" type="string">
-  Order type: `mesa`, `pickup`, or `delivery`.
+<ResponseField name="hora_creacion" type="string">
+  ISO 8601 UTC timestamp of when the order was created, e.g. `"2025-01-14T19:32:05"`.
 </ResponseField>
 
-<ResponseField name="estado_orden" type="string">
-  Current kitchen/delivery status: `recibido`, `preparando`, `listo`, or `entregado`.
+<ResponseField name="cliente_nombre" type="string">
+  Full name of the customer. Defaults to `"Cliente General"` if the client record is missing.
+</ResponseField>
+
+<ResponseField name="cliente_cedula" type="string">
+  Venezuelan national ID of the customer, e.g. `"V-18340921"`.
+</ResponseField>
+
+<ResponseField name="cliente_telefono" type="string">
+  Phone number on file for the customer.
+</ResponseField>
+
+<ResponseField name="tipo" type="string">
+  Order type string, same value as `tipo_pedido`. Included for compatibility.
+</ResponseField>
+
+<ResponseField name="tipo_pedido" type="string">
+  Order fulfillment type: `mesa`, `pickup`, or `delivery`.
+</ResponseField>
+
+<ResponseField name="mesa" type="integer | null">
+  Table number assigned to the order, same value as `id_mesa`.
 </ResponseField>
 
 <ResponseField name="id_mesa" type="integer | null">
   Table ID for dine-in orders. `null` for pickup or delivery.
 </ResponseField>
 
-<ResponseField name="cedula_cliente" type="string">
-  Venezuelan national ID or identifier of the customer who placed the order.
+<ResponseField name="direccion" type="string | null">
+  Delivery address, same value as `direccion_envio`. `null` for non-delivery orders.
 </ResponseField>
 
 <ResponseField name="direccion_envio" type="string | null">
-  Delivery address for `delivery`-type orders. `null` otherwise.
+  Full delivery address string. Only populated when `tipo_pedido` is `delivery`.
 </ResponseField>
 
-<ResponseField name="fecha_creacion" type="string">
-  ISO 8601 UTC timestamp of when the order was created.
+<ResponseField name="items" type="array">
+  Line items attached to the order. Each element contains:
+
+  <ResponseField name="items[].id_producto" type="integer">
+    Dish ID, mirrored from `id_plato`.
+  </ResponseField>
+  <ResponseField name="items[].id_plato" type="integer">
+    Primary key of the `plato` record.
+  </ResponseField>
+  <ResponseField name="items[].nombre" type="string">
+    Dish name resolved from the `plato` table. Falls back to `"Plato #<id>"` if the record is missing.
+  </ResponseField>
+  <ResponseField name="items[].cantidad" type="integer">
+    Quantity ordered.
+  </ResponseField>
+  <ResponseField name="items[].precio_unitario" type="number">
+    Unit price at the time of ordering, sourced from `plato.precio`.
+  </ResponseField>
+  <ResponseField name="items[].subtotal" type="number">
+    Line total (`precio_unitario × cantidad`), rounded to two decimal places.
+  </ResponseField>
 </ResponseField>
 
-<ResponseField name="cliente" type="object | null">
-  Nested customer object with `cedula_cliente`, `nombre`, `telefono`, `email`, and `direccion_habitual`.
+<ResponseField name="subtotal" type="number">
+  Sum of all line item subtotals before tax.
 </ResponseField>
 
-<ResponseField name="detalles" type="array">
-  Array of line-item objects, each containing `num_ticket`, `id_plato`, `cantidad`, `subtotal`, and a nested `plato` object with dish details.
+<ResponseField name="iva" type="number">
+  Value-added tax at 16% (`subtotal × 0.16`), rounded to two decimal places.
+</ResponseField>
+
+<ResponseField name="total" type="number">
+  Final amount due (`subtotal + iva`), rounded to two decimal places.
+</ResponseField>
+
+<ResponseField name="Estatus_Orden" type="string">
+  Capitalized status string for display purposes, e.g. `"Preparando"`. Same state as `estado_orden`.
+</ResponseField>
+
+<ResponseField name="estado_orden" type="string">
+  Lowercase status string. One of `recibido`, `preparando`, `listo`, or `entregado`.
 </ResponseField>
 
 **Example response**
@@ -131,35 +186,33 @@ Returns a JSON array of order objects. Each object matches the `PedidoOut` schem
 ```json
 [
   {
+    "id_pedido": 88,
     "num_ticket": 88,
+    "hora_creacion": "2025-01-14T19:32:05",
+    "cliente_nombre": "Ana Rivas",
+    "cliente_cedula": "V-18340921",
+    "cliente_telefono": "0416-7823041",
+    "tipo": "mesa",
     "tipo_pedido": "mesa",
-    "estado_orden": "preparando",
+    "mesa": 3,
     "id_mesa": 3,
-    "cedula_cliente": "V-18340921",
+    "direccion": null,
     "direccion_envio": null,
-    "fecha_creacion": "2025-01-14T19:32:05.000Z",
-    "cliente": {
-      "cedula_cliente": "V-18340921",
-      "nombre": "Ana Rivas",
-      "telefono": "0416-7823041",
-      "email": "ana.rivas@email.com",
-      "direccion_habitual": null
-    },
-    "detalles": [
+    "items": [
       {
-        "num_ticket": 88,
+        "id_producto": 5,
         "id_plato": 5,
+        "nombre": "Pabellón Criollo",
         "cantidad": 2,
-        "subtotal": 48.00,
-        "plato": {
-          "id_plato": 5,
-          "nombre": "Pabellón Criollo",
-          "descripcion": "Arroz, caraotas, carne mechada y tajadas",
-          "precio": 24.00,
-          "categoria": "plato_principal"
-        }
+        "precio_unitario": 24.00,
+        "subtotal": 48.00
       }
-    ]
+    ],
+    "subtotal": 48.00,
+    "iva": 7.68,
+    "total": 55.68,
+    "Estatus_Orden": "Preparando",
+    "estado_orden": "preparando"
   }
 ]
 ```

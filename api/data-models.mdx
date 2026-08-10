@@ -227,6 +227,107 @@ Lookup table for supply item categories.
 
 ---
 
+## Pydantic Schemas
+
+These schemas are defined in `schemas.py` and are used by FastAPI to validate request bodies and shape JSON responses. All `Out` schemas use `model_config = ConfigDict(from_attributes=True)` to allow direct construction from SQLAlchemy ORM instances.
+
+### `PlatoIn` / `PlatoOut` — Menu item payload
+
+**`PlatoIn`** — request body for `POST /api/platos`
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `nombre` | `string` | ✅ | Display name of the dish |
+| `descripcion` | `string \| null` | — | Short customer-facing description |
+| `precio` | `float` | ✅ | Unit price in base currency |
+| `categoria` | `CategoriaPlatoEnum` | ✅ | Menu category (`entrada`, `plato_principal`, `postre`, `bebida`, `acompañante`) |
+
+**`PlatoOut`** — response shape for menu item endpoints; extends `PlatoIn` with the generated key:
+
+| Additional field | Type | Description |
+|---|---|---|
+| `id_plato` | `integer` | Auto-assigned surrogate primary key |
+
+---
+
+### `DetallePedidoIn` / `DetallePedidoOut` — Order line item
+
+**`DetallePedidoIn`** — embedded in `PedidoIn.detalles`
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `id_plato` | `integer` | ✅ | FK reference to `plato.id_plato` |
+| `cantidad` | `integer` | ✅ | Number of units ordered |
+| `subtotal` | `float` | ✅ | Pre-calculated line total (`precio × cantidad`) |
+
+**`DetallePedidoOut`** — response shape; extends `DetallePedidoIn` with the ticket reference and nested dish:
+
+| Additional field | Type | Description |
+|---|---|---|
+| `num_ticket` | `integer` | Parent order ticket number |
+| `plato` | `PlatoOut \| null` | Nested dish object (eager-loaded by the router) |
+
+<Note>
+  The `detalle_pedido` table has no `notas` column, and the schema carries no per-line notes field. Do not pass a `notas` key — it will be silently ignored or raise a validation error depending on your Pydantic settings.
+</Note>
+
+---
+
+### `PedidoIn` / `PedidoOut` — Order payload
+
+**`PedidoIn`** — request body for `POST /api/ordenes`
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `tipo_pedido` | `TipoPedidoEnum` | ✅ | `mesa`, `pickup`, or `delivery` |
+| `estado_orden` | `EstadoOrdenEnum` | — | Initial lifecycle state; defaults to `recibido` |
+| `id_mesa` | `integer \| null` | — | Table assignment (omit for pickup/delivery) |
+| `cedula_cliente` | `string` | ✅ | Customer national ID; must match an existing `cliente` row or be created via the auxiliary fields below |
+| `cliente_nombre` | `string \| null` | — | **Auxiliary.** If the `cedula_cliente` does not yet exist, the router uses this value to auto-create the customer record |
+| `cliente_telefono` | `string \| null` | — | **Auxiliary.** Paired with `cliente_nombre` for on-the-fly customer creation |
+| `direccion_envio` | `string \| null` | — | Delivery address (required in practice for `delivery` orders) |
+| `detalles` | `List[DetallePedidoIn]` | ✅ | One or more line items; must not be empty |
+
+**`PedidoOut`** — response shape for order endpoints
+
+| Field | Type | Description |
+|---|---|---|
+| `num_ticket` | `integer` | Auto-assigned order number |
+| `tipo_pedido` | `TipoPedidoEnum` | Order type |
+| `estado_orden` | `EstadoOrdenEnum` | Current lifecycle state |
+| `id_mesa` | `integer \| null` | Table assignment |
+| `cedula_cliente` | `string` | Owning customer ID |
+| `direccion_envio` | `string \| null` | Delivery address |
+| `fecha_creacion` | `datetime` | UTC timestamp of order placement |
+| `cliente` | `ClienteOut \| null` | Nested customer object (eager-loaded) |
+| `detalles` | `List[DetallePedidoOut]` | Line items with nested dish objects |
+
+---
+
+### `PedidoUpdateEstatus` — Order status update
+
+Request body for `PUT /api/ordenes/{num_ticket}`.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `estado_orden` | `EstadoOrdenEnum` | ✅ | New lifecycle state to assign to the order |
+
+---
+
+### `ResumenReporte` — Dashboard KPI response
+
+Response shape for `GET /api/reportes/resumen`.
+
+| Field | Type | Description |
+|---|---|---|
+| `total_pedidos` | `integer` | Total number of orders in the last 30 days |
+| `ingresos_brutos` | `float` | Gross revenue (sum of invoice totals) in the last 30 days |
+| `tiempo_promedio_seg` | `float` | Average order completion time in seconds |
+| `pct_cambio_pedidos` | `float` | Period-over-period percentage change in order count |
+| `pct_cambio_ingresos` | `float` | Period-over-period percentage change in gross revenue |
+
+---
+
 ## ORM Relationships
 
 The following relationships are declared on the SQLAlchemy models and drive eager-loading behaviour in the routers.

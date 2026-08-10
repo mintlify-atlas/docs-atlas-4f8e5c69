@@ -1,5 +1,5 @@
 ---
-title: "Customer Digital Menu: Self-Service Ordering and Order Tracking"
+title: "Customer Digital Menu: Self-Service Ordering and Tracking"
 sidebarTitle: "Customer Menu"
 description: "A public-facing digital menu where customers browse the catalog, place their own orders, and track order status in real time by cedula."
 ---
@@ -125,7 +125,7 @@ Customers who already placed an order (in a previous session or at the POS) can 
 The customer view intentionally has **no access** to any staff functionality:
 
 - No sidebar, no topbar, no navigation links to POS / Kitchen / Inventory.
-- No API key is sent with the order creation or lookup requests — the orders endpoint is public.
+- The `GET /api/v1/platos` catalog request sends an `x-api-key` header (from `VITE_API_KEY`), but the backend does not validate it — no server-side authentication is enforced. Order creation and lookup requests use no API key at all.
 - The URL `?view=menu` is the only entry point. Any other `?view=` value (e.g. `pos`, `kitchen`) opens the staff system instead.
 
 ---
@@ -134,10 +134,10 @@ The customer view intentionally has **no access** to any staff functionality:
 
 | Action | Method | Endpoint | Auth |
 |---|---|---|---|
-| Load menu catalog | `GET` | `/api/v1/platos` | API key required |
-| Place an order | `POST` | `/api/v1/ordenes` | Public |
-| Poll order status | `GET` | `/api/v1/ordenes/{num_ticket}` | Public |
-| Lookup by cedula | `GET` | `/api/v1/ordenes` | Public |
+| Load menu catalog | `GET` | `/api/v1/platos` | `x-api-key` header sent; not enforced by backend |
+| Place an order | `POST` | `/api/v1/ordenes` | Public — no API key |
+| Poll order status | `GET` | `/api/v1/ordenes/{num_ticket}` | Public — no API key |
+| Lookup by cedula | `GET` | `/api/v1/ordenes` | Public — no API key |
 
 ### Example: Place an Order from the Customer Menu
 

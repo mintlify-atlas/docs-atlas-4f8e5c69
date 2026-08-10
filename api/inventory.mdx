@@ -69,7 +69,7 @@ Returns an array of insumo objects. Each object contains both a camelCase alias 
 </Note>
 
 ```bash
-curl -X GET http://localhost:8000/api/inventario \
+curl -X GET http://localhost:5000/api/inventario \
   -H "Accept: application/json"
 ```
 
@@ -108,7 +108,7 @@ Creates a new supply item in the inventory. The endpoint accepts either camelCas
 Returns the newly created insumo object with the full dual-key response shape described in [GET /api/inventario](#get-apiinventario).
 
 ```bash
-curl -X POST http://localhost:8000/api/inventario \
+curl -X POST http://localhost:5000/api/inventario \
   -H "Content-Type: application/json" \
   -d '{
     "nombre": "Harina de maíz precocida",
@@ -161,12 +161,12 @@ Returns the full updated insumo object with the dual-key response shape. Returns
 
 ```bash
 # Update stock after a delivery
-curl -X PUT http://localhost:8000/api/inventario/7 \
+curl -X PUT http://localhost:5000/api/inventario/7 \
   -H "Content-Type: application/json" \
   -d '{"stock": 75.0}'
 
 # Update both stock and reorder threshold
-curl -X PUT http://localhost:8000/api/inventario/7 \
+curl -X PUT http://localhost:5000/api/inventario/7 \
   -H "Content-Type: application/json" \
   -d '{
     "stock": 75.0,
@@ -198,6 +198,6 @@ Returns `204 No Content` with an empty body on success. Returns `404` with `{"de
 </Note>
 
 ```bash
-curl -X DELETE http://localhost:8000/api/inventario/7 \
+curl -X DELETE http://localhost:5000/api/inventario/7 \
   -H "Accept: application/json"
 ```

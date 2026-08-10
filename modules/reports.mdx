@@ -1,5 +1,5 @@
 ---
-title: "Reports and KPI Dashboard: Financial Analytics"
+title: "Reports and KPI Dashboard: Sales and Financial Analytics"
 sidebarTitle: "Reports"
 description: "Monitor revenue, order volume, and preparation times with rolling 30-day KPIs, period filters, and paginated order tables exportable to CSV."
 ---
@@ -44,8 +44,8 @@ The order table below the KPI cards can be narrowed with two independent filters
 
 | Filter | Options | Default |
 |---|---|---|
-| Period | `hoy` (today), `semana` (last 7 days), `mes` (last 30 days) | `hoy` |
-| Status | `Todos`, `Recibido`, `Preparando`, `Listo`, `Entregado` | `Todos` |
+| Period | `hoy` (today), `7d` (last 7 days), `30d` (last 30 days) | `hoy` |
+| Status | `Todos`, `Recibido`, `Preparando`, `Listo` | `Todos` |
 
 Both filters trigger a fresh API call to `GET /api/reportes/pedidos` with the corresponding `periodo` and `estado` query parameters, so the KPI cards and the order table always reflect consistent data for the selected time range.
 
@@ -77,6 +77,6 @@ Both filters trigger a fresh API call to `GET /api/reportes/pedidos` with the co
 | `GET` | `/api/reportes/resumen` | — | Return the five KPI metrics for the rolling 30-day window |
 | `GET` | `/api/reportes/pedidos` | `periodo`, `estado` | Return orders filtered by time period and optional status |
 
-**`periodo` values:** `hoy`, `semana`, `mes` (defaults to last 30 days if omitted)
+**`periodo` values:** `hoy`, `7d`, `30d` (any unrecognized value, including omitted, defaults to last 30 days)
 
-**`estado` values:** `recibido`, `preparando`, `listo`, `entregado` (omit or pass `Todos` for no status filter)
+**`estado` values:** `recibido`, `preparando`, `listo` (omit or pass `Todos` for no status filter)
